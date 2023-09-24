@@ -9,6 +9,7 @@ struct test
     test_func *function;
   };
 
+// SECTION - test codes
 static const struct test tests[] = 
   {
     {"alarm-single", test_alarm_single},
@@ -39,6 +40,7 @@ static const struct test tests[] =
     {"mlfqs-nice-10", test_mlfqs_nice_10},
     {"mlfqs-block", test_mlfqs_block},
   };
+// !SECTION - test codes
 
 static const char *test_name;
 
