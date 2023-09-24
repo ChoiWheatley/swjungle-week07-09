@@ -11,6 +11,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #include "thread.h"
@@ -117,6 +118,8 @@ thread_init (void) {
 	list_init (&ready_list);
 	list_init (&destruction_req);
 	list_init (&g_sleep_list);
+	
+	printf("[*] g_sleep_list init success!\n");
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -465,15 +468,39 @@ do_iret (struct intr_frame *tf) {
  * exceeds given `ticks`
  */
 void thread_sleep(int64_t ticks) {
-	struct thread * cur = thread_current();
+  struct thread *cur = thread_current();
 
-	list_push_back(&g_sleep_list, &cur->elem);
-	thread_block();
+  // NOTE - 처음 인터럽트를 끈 놈이 인터럽트를 켜기 위해서 `old_level`
+  // 변수를 사용한다.
+  enum intr_level old_level = intr_disable();
+
+  cur->local_tick = timer_ticks() + ticks;
+
+  list_push_back(&g_sleep_list, &cur->elem);
+  thread_block();
+
+  intr_set_level(old_level);
 }
 
-void thread_wakeup(){
-	//만약 
-	// thread_unblock();
+/**
+ * @brief sleep_list의 최소값을 가진 스레드를 깨울지 말지 결정한다.
+ * 
+ * @note g_sleep_list는 항상 정렬된 상태임을 보장해야 한다.
+ */
+void thread_wakeup() {
+	if (list_empty(&g_sleep_list)) {
+		return;
+	}
+	int64_t current_ticks = timer_ticks();
+	struct thread *head = list_entry(list_front(&g_sleep_list), struct thread, elem);
+	
+	if (current_ticks >= head->local_tick) {
+		list_pop_front(&g_sleep_list);
+		thread_unblock(head);
+	}
+	
+	// 인터럽트에 의해 멱살잡고 끌려나온 스레드를 다시 준비상태로 만들어주어야 함.
+	thread_yield();
 }
 
 /* Switching the thread by activating the new thread's page

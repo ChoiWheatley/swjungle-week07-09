@@ -105,8 +105,8 @@ timer_sleep (int64_t ticks) {
 	// sleep 하는 스레드를 깨우는 건 여기에서 하지 말고 스케줄러에게 맞기자.
 	thread_sleep(ticks);
 
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	// while (timer_elapsed (start) < ticks)
+	// 	thread_yield ();
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -142,6 +142,7 @@ timer_print_stats (void) {
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
+	thread_wakeup();
 	thread_tick ();
 }
 
