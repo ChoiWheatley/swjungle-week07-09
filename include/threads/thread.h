@@ -91,7 +91,9 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
-
+	
+	int64_t local_tick; /* NOTE - `timer_sleep`에서 저장할 로컬 틱 */
+	
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 
@@ -142,5 +144,9 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
+
+/** SECTION - Additional Decl */
+void thread_sleep(int64_t ticks);
+/** !SECTION - Additional Decl */
 
 #endif /* threads/thread.h */

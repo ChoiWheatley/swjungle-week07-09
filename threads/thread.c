@@ -13,6 +13,7 @@
 #include "intrinsic.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "thread.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -27,6 +28,11 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
+
+/**
+ * @brief `timer_sleep()`에 의해 추가될 스레드들을 담은 연결리스트
+ */
+static struct list g_sleep_list;
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -48,6 +54,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
+static int64_t g_min_tick; // NOTE - sleep_list 스레드들의 최소 local_tick
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -109,6 +116,7 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
+	list_init (&g_sleep_list);
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -452,6 +460,16 @@ do_iret (struct intr_frame *tf) {
 			: : "g" ((uint64_t) tf) : "memory");
 }
 
+/**
+ * @brief put current thread into sleep_list and block it until elapsed tick
+ * exceeds given `ticks`
+ */
+void thread_sleep(int64_t ticks) {
+	struct thread * cur = thread_current();
+
+	list_push_back(&g_sleep_list, &cur->elem);
+}
+
 /* Switching the thread by activating the new thread's page
    tables, and, if the previous thread is dying, destroying it.
 
@@ -529,6 +547,8 @@ static void
 do_schedule(int status) {
 	ASSERT (intr_get_level () == INTR_OFF);
 	ASSERT (thread_current()->status == THREAD_RUNNING);
+	
+	// dying 상태인 스레드들을 free 한다.
 	while (!list_empty (&destruction_req)) {
 		struct thread *victim =
 			list_entry (list_pop_front (&destruction_req), struct thread, elem);
@@ -551,6 +571,7 @@ schedule (void) {
 
 	/* Start new time slice. */
 	thread_ticks = 0;
+	g_min_tick = 0;
 
 #ifdef USERPROG
 	/* Activate the new address space. */

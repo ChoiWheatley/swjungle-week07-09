@@ -87,12 +87,24 @@ timer_elapsed (int64_t then) {
 	return timer_ticks () - then;
 }
 
-/* Suspends execution for approximately TICKS timer ticks. */
+
+/**
+ * @brief 현재 스레드를 sleep_list에 추가한다. tick이 다 지나면 `wakeup`하여 
+ * 해당 스레드를 다시 ready_list에 추가한다.
+ * sleep_list에 있는 원소들은 전부 blocking 상태.
+ * 
+ * @param ticks sleep 할 틱의 횟수
+ */
 void
 timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
 
 	ASSERT (intr_get_level () == INTR_ON);
+	
+	// TODO - 단순 busy wait 하지 말고 sleep_list에 추가하여 block상태로 바꿀 것.
+	// sleep 하는 스레드를 깨우는 건 여기에서 하지 말고 스케줄러에게 맞기자.
+	thread_sleep(ticks);
+
 	while (timer_elapsed (start) < ticks)
 		thread_yield ();
 }
@@ -121,7 +133,12 @@ timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
-/* Timer interrupt handler. */
+/**
+ * @brief Timer interrupt handler.
+ * 
+ * TODO - sleep list, min tick을 확인하여 깨울 스레드가 있는지 확인한다.
+ * 필요에 따라 스레드를 ready_list에 추가하고 min_tick을 수정한다.
+ */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
