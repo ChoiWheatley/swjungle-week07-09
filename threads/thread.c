@@ -468,6 +468,12 @@ void thread_sleep(int64_t ticks) {
 	struct thread * cur = thread_current();
 
 	list_push_back(&g_sleep_list, &cur->elem);
+	thread_block();
+}
+
+void thread_wakeup(){
+	//만약 
+	// thread_unblock();
 }
 
 /* Switching the thread by activating the new thread's page
