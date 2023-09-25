@@ -493,22 +493,16 @@ void thread_sleep(int64_t ticks) {
  * @note g_sleep_list는 항상 정렬된 상태임을 보장해야 한다.
  */
 void thread_wakeup() {
-	if (list_empty(&g_sleep_list)) {
-		return;
-	}
 	int64_t current_ticks = timer_ticks();
-	// struct thread *head = list_entry(list_front(&g_sleep_list), struct thread, elem);
 
 	while (!list_empty(&g_sleep_list)) {
 		struct list_elem *front = list_front(&g_sleep_list);
-		if (current_ticks >= list_entry(front, struct thread, elem)->local_tick)
+		if (current_ticks >= list_entry(front, struct thread, elem)->local_tick) {
 			list_remove(front);
 			thread_unblock(list_entry(front, struct thread, elem));
+		} else
+			break;
 	}
-	// if (current_ticks >= head->local_tick) {
-	// 	list_pop_front(&g_sleep_list);
-	// 	thread_unblock(head);
-	// }
 	
 	// 인터럽트에 의해 멱살잡고 끌려나온 스레드를 다시 준비상태로 만들어주어야 함.
 }
