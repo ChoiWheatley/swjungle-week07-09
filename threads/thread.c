@@ -460,20 +460,57 @@ do_iret (struct intr_frame *tf) {
 			: : "g" ((uint64_t) tf) : "memory");
 }
 
+bool less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  struct thread *a_th = list_entry(a, struct thread, elem);
+  struct thread *b_th = list_entry(b, struct thread, elem);
+  
+  return a_th->local_tick < b_th->local_tick;
+}
+
 /**
  * @brief put current thread into sleep_list and block it until elapsed tick
  * exceeds given `ticks`
  */
 void thread_sleep(int64_t ticks) {
-	struct thread * cur = thread_current();
+  struct thread *cur = thread_current();
+  cur->local_tick = timer_ticks() + ticks;
 
-	list_push_back(&g_sleep_list, &cur->elem);
-	thread_block();
+  // NOTE - 처음 인터럽트를 끈 놈이 인터럽트를 켜기 위해서 `old_level`
+  // 변수를 사용한다.
+  {
+    enum intr_level old_level = intr_disable();
+
+    list_insert_ordered(&g_sleep_list, &cur->elem, less, NULL);
+    thread_block();
+
+    intr_set_level(old_level);
+  }
 }
 
-void thread_wakeup(){
-	//만약 
-	// thread_unblock();
+/**
+ * @brief sleep_list의 최소값을 가진 스레드를 깨울지 말지 결정한다.
+ * 
+ * @note g_sleep_list는 항상 정렬된 상태임을 보장해야 한다.
+ */
+void thread_wakeup() {
+	if (list_empty(&g_sleep_list)) {
+		return;
+	}
+	int64_t current_ticks = timer_ticks();
+	// struct thread *head = list_entry(list_front(&g_sleep_list), struct thread, elem);
+
+	while (!list_empty(&g_sleep_list)) {
+		struct list_elem *front = list_front(&g_sleep_list);
+		if (current_ticks >= list_entry(front, struct thread, elem)->local_tick)
+			list_remove(front);
+			thread_unblock(list_entry(front, struct thread, elem));
+	}
+	// if (current_ticks >= head->local_tick) {
+	// 	list_pop_front(&g_sleep_list);
+	// 	thread_unblock(head);
+	// }
+	
+	// 인터럽트에 의해 멱살잡고 끌려나온 스레드를 다시 준비상태로 만들어주어야 함.
 }
 
 /* Switching the thread by activating the new thread's page
