@@ -470,13 +470,6 @@ bool less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED
   return a_th->local_tick < b_th->local_tick;
 }
 
-bool less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
-  struct thread *a_th = list_entry(a, struct thread, elem);
-  struct thread *b_th = list_entry(b, struct thread, elem);
-  
-  return a_th->local_tick < b_th->local_tick;
-}
-
 /**
  * @brief put current thread into sleep_list and block it until elapsed tick
  * exceeds given `ticks`
