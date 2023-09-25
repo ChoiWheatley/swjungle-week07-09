@@ -470,6 +470,13 @@ bool less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED
   return a_th->local_tick < b_th->local_tick;
 }
 
+bool less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  struct thread *a_th = list_entry(a, struct thread, elem);
+  struct thread *b_th = list_entry(b, struct thread, elem);
+  
+  return a_th->local_tick < b_th->local_tick;
+}
+
 /**
  * @brief put current thread into sleep_list and block it until elapsed tick
  * exceeds given `ticks`
@@ -496,23 +503,17 @@ void thread_sleep(int64_t ticks) {
  * @note g_sleep_list는 항상 정렬된 상태임을 보장해야 한다.
  */
 void thread_wakeup() {
-  if (list_empty(&g_sleep_list)) {
-    return;
-  }
-  int64_t current_ticks = timer_ticks();
-  struct thread *head =
-      list_entry(list_front(&g_sleep_list), struct thread, elem);
+	int64_t current_ticks = timer_ticks();
 
-  if (current_ticks >= head->local_tick) {
-    list_pop_front(&g_sleep_list);
-    thread_unblock(head);
-  }
-
-  /**
-   * 인터럽트에 의해 멱살잡고 끌려나온 스레드를 다시 준비상태로
-   * 만들어주어야 함. 하지만 무턱대로 `thread_yield`를 호출해서는 안되는게, 이
-   * 함수를 호출한 인터럽트 핸들러가 `thread_yield`를 호출해야 하기 때문이다.
-   */
+	while (!list_empty(&g_sleep_list)) {
+		struct list_elem *front = list_front(&g_sleep_list);
+		if (current_ticks >= list_entry(front, struct thread, elem)->local_tick) {
+			list_remove(front);
+			thread_unblock(list_entry(front, struct thread, elem));
+		} else
+			break;
+	}
+	// 인터럽트에 의해 멱살잡고 끌려나온 스레드를 다시 준비상태로 만들어주어야 함.
 }
 
 /* Switching the thread by activating the new thread's page
