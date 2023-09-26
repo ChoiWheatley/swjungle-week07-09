@@ -66,7 +66,7 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		list_insert_ordered (&sema->waiters, &thread_current ()->elem, origin_priority_descend, NULL);
 		thread_block ();
 	}
 	sema->value--;
@@ -113,6 +113,7 @@ sema_up (struct semaphore *sema) {
 		thread_unblock (list_entry (list_pop_front (&sema->waiters),
 					struct thread, elem));
 	sema->value++;
+	thread_yield();
 	intr_set_level (old_level);
 }
 
@@ -188,7 +189,14 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
+	// 락 홀더의 priority list의 front를 가지는 thread의 priority 가 thread_current의 priority list의 front를 가지는 thread의 priority보다 작으면 donate한다.
+	// if (get_thread(list_front(&lock->holder->priority_list))->priority < &thread_current()->priority) {
+	// 	list_insert_ordered(&lock->holder->priority_list, &thread_current()->elem, donated_priority_descend, NULL);
+	// 	thread_yield();
+	// }
+
 	sema_down (&lock->semaphore);
+
 	lock->holder = thread_current ();
 }
 
@@ -223,6 +231,9 @@ lock_release (struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	lock->holder = NULL;
+	if (thread_current() != get_thread(list_front(&thread_current()->priority_list)))
+		list_pop_front(&thread_current()->priority_list);
+
 	sema_up (&lock->semaphore);
 }
 
