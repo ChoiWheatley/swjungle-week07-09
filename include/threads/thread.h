@@ -96,6 +96,7 @@ struct thread {
 	
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+	struct list priority_list;			/* List of priorities (include donated_priority) */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -127,7 +128,6 @@ tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
 void thread_unblock (struct thread *);
-void thread_wakeup(); // sleep_list에서 자기 차례가 되면 ready_list로 unblock해서 list_push_back 함수
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
@@ -148,6 +148,13 @@ void do_iret (struct intr_frame *tf);
 
 /** SECTION - Additional Decl */
 void thread_sleep(int64_t ticks);
+void thread_wakeup();
+
+bool tick_ascend(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool origin_priority_descend(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool donated_priority_descend(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
+struct thread *get_thread(struct list_elem *elem);
 /** !SECTION - Additional Decl */
 
 #endif /* threads/thread.h */
