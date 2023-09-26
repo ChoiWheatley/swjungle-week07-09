@@ -191,7 +191,7 @@ lock_acquire (struct lock *lock) {
 
 	// 락 홀더의 priority list의 front를 가지는 thread의 priority 가 thread_current의 priority list의 front를 가지는 thread의 priority보다 작으면 donate한다.
 	// if (get_thread(list_front(&lock->holder->priority_list))->priority < &thread_current()->priority) {
-	// 	list_insert_ordered(&lock->holder->priority_list, &thread_current()->elem, donated_priority_descend, NULL);
+	// 	list_insert_ordered(&lock->holder->priority_list, &thread_current()->elem, origin_priority_descend, NULL);
 	// 	thread_yield();
 	// }
 
