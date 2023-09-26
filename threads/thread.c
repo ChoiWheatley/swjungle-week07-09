@@ -324,13 +324,18 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
   thread_current ()->priority = new_priority;
+  list_pop_back(&thread_current()->priority_list);
+  while( !list_empty(&thread_current()->priority_list) && get_thread(list_front(&thread_current()->priority_list))->priority <= new_priority) {
+    list_pop_back(&thread_current()->priority_list);
+  }
+  list_push_back(&thread_current()->priority_list, &thread_current()->elem);
   thread_yield();
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) {
-  return thread_current ()->priority;
+  return get_thread(list_front(&thread_current ()->priority_list))->priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
