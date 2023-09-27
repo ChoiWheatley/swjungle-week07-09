@@ -113,7 +113,7 @@ sema_up (struct semaphore *sema) {
 		thread_unblock (list_entry (list_pop_front (&sema->waiters),
 					struct thread, elem));
 	sema->value++;
-	thread_yield();
+	thread_yield(); // ready list 재정렬 후 강제 yield
 	intr_set_level (old_level);
 }
 
@@ -191,40 +191,31 @@ void lock_acquire(struct lock *lock) {
   struct thread *cur = thread_current();
   struct list *dlist = &lock->holder->donation_list;
 	struct list *waiters = &lock->semaphore.waiters;
+	struct thread *waiter_max = get_thread_d_elem(list_max(waiters, origin_priority_asc, NULL));
 
-  if (lock->semaphore.value == 0 && lock->holder->priority < cur->priority) {
-    // lock 획득에 실패하고 , wait_on_lock을 설정한다.
+	if (lock->semaphore.value == 0) {
+		// lock 획득에 실패
+		cur->wait_on_lock = lock;
 
-    if (list_empty(waiters) &&
-        lock->holder->priority < cur->priority) {
-			// 첫빠따로 waiters에 들어가는 경우
-      list_push_back(dlist, &cur->d_elem);
-    } else if (get_thread_d_elem(list_max(waiters, origin_priority_asc, NULL))
-                   ->priority < cur->priority) {
-      cur->wait_on_lock = lock;
-
-      struct list_elem *e;
-
-      for (e = list_begin(dlist); e != list_end(dlist); list_next(e)) {
-        struct thread *e_th = get_thread_d_elem(e);
-        if (e_th->wait_on_lock == lock) {
-          // donation lock의 원소들 중 나와 같은 waiters에 있고
-            //  나의 priority보다 작은 경우 기존 원소를 제거하고 내 것을 추가
-            list_remove(e);
-            list_push_back(dlist, &cur->d_elem);
-        }
-      }
-    }
-  }
+		if (lock->holder->priority < cur->priority) {
+			// do donation
+			if (list_empty(waiters) && lock->holder->priority < cur->priority) {
+				// 첫빠따로 waiters에 들어가는 경우
+				list_push_back(dlist, &cur->d_elem);
+			} else if (waiter_max->priority < cur->priority) {
+				//  나의 priority보다 작은 경우 기존 원소를 제거하고 내 것을
+				//  추가
+				list_remove(&waiter_max->d_elem);
+				list_push_back(dlist, &cur->d_elem);
+			}
+		}
+	}
 
   sema_down(&lock->semaphore);
 
   // 획득한 lock을 기다리는 waiters 중 max_priority를 가진 thread의 d_elem을
   // donation_list에 추가한다
-  list_push_back(&cur->donation_list,
-                 &get_thread_elem(list_max(&lock->semaphore.waiters,
-                                           origin_priority_asc, NULL))
-                      ->d_elem);
+  list_push_back(&cur->donation_list, &get_thread_elem(list_max(&lock->semaphore.waiters, origin_priority_asc, NULL))->d_elem);
 
   lock->holder = thread_current();
 }
@@ -258,6 +249,13 @@ void
 lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
+	
+	struct list_elem *waiter_max = list_max(&lock->semaphore.waiters, origin_priority_asc, NULL);
+	
+	if (lock->holder->priority < get_thread_elem(waiter_max)->priority) {
+		// donate_list에 원소가 존재하는 경우
+		list_remove(waiter_max);
+	}
 
 	lock->holder = NULL;
 	sema_up (&lock->semaphore);
