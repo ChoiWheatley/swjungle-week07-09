@@ -463,7 +463,7 @@ do_iret (struct intr_frame *tf) {
       : : "g" ((uint64_t) tf) : "memory");
 }
 
-bool less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+bool tick_ascend(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
   struct thread *a_th = list_entry(a, struct thread, elem);
   struct thread *b_th = list_entry(b, struct thread, elem);
   
@@ -473,7 +473,7 @@ bool less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED
 bool less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
   struct thread *a_th = list_entry(a, struct thread, elem);
   struct thread *b_th = list_entry(b, struct thread, elem);
-  
+
   return a_th->local_tick < b_th->local_tick;
 }
 
@@ -490,7 +490,7 @@ void thread_sleep(int64_t ticks) {
   {
     enum intr_level old_level = intr_disable();
 
-    list_insert_ordered(&g_sleep_list, &cur->elem, less, NULL);
+    list_insert_ordered(&g_sleep_list, &cur->elem, tick_ascend, NULL);
     thread_block();
 
     intr_set_level(old_level);
