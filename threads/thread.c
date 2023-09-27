@@ -217,7 +217,6 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-  thread_yield();
 
   return tid;
 }
@@ -252,7 +251,7 @@ thread_unblock (struct thread *t) {
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered (&ready_list, &t->elem, donated_priority_descend, NULL);
+  list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -315,7 +314,7 @@ thread_yield (void) {
 
   old_level = intr_disable ();
   if (curr != idle_thread)
-    list_insert_ordered (&ready_list, &curr->elem, donated_priority_descend, NULL);
+    list_push_back (&ready_list, &curr->elem);
   do_schedule (THREAD_READY);
   intr_set_level (old_level);
 }
@@ -324,7 +323,6 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
   thread_current ()->priority = new_priority;
-  thread_yield();
 }
 
 /* Returns the current thread's priority. */
@@ -421,8 +419,6 @@ init_thread (struct thread *t, const char *name, int priority) {
   strlcpy (t->name, name, sizeof t->name);
   t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
   t->priority = priority;
-  list_init(&t->priority_list);
-  list_push_back(&t->priority_list, &t->elem);
   t->magic = THREAD_MAGIC;
 }
 
@@ -474,33 +470,11 @@ bool tick_ascend(const struct list_elem *a, const struct list_elem *b, void *aux
   return a_th->local_tick < b_th->local_tick;
 }
 
-/**
- * @brief semaphore의 waiters를 origin priority를 기준으로 내림차순 정렬하는 함수
- */
-bool origin_priority_descend(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+bool less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
   struct thread *a_th = list_entry(a, struct thread, elem);
   struct thread *b_th = list_entry(b, struct thread, elem);
 
-    return a_th->priority > b_th->priority;
-}
-
-/**
- * @brief ready_list를 thread의 donate된 priority를 기준으로 내림차순 정렬하는 함수
- * @note priority의 list_back은 항상 origin priority
- */
-bool donated_priority_descend(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
-  struct thread *a_th = list_entry(a, struct thread, elem);
-  struct thread *b_th = list_entry(b, struct thread, elem);
-
-  int a_donate_priority = list_entry(list_front(&a_th->priority_list), struct thread, elem)->priority;
-  int b_donate_priority = list_entry(list_front(&b_th->priority_list), struct thread, elem)->priority;
-
-    return a_donate_priority > b_donate_priority;
-}
-
-struct thread *get_thread(struct list_elem *elem)
-{
-    return list_entry(elem, struct thread, elem);
+  return a_th->local_tick < b_th->local_tick;
 }
 
 /**

@@ -2,4 +2,4 @@ cd threads
 make clean
 make
 cd build
-pintos -- -q run priority-change
+pintos -- -q run alarm-multiple
