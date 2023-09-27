@@ -251,7 +251,7 @@ thread_unblock (struct thread *t) {
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered(&ready_list, &t->elem, priority_desc, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -314,7 +314,7 @@ thread_yield (void) {
 
   old_level = intr_disable ();
   if (curr != idle_thread)
-    list_push_back (&ready_list, &curr->elem);
+    list_insert_ordered(&ready_list, &curr->elem, priority_desc, NULL);
   do_schedule (THREAD_READY);
   intr_set_level (old_level);
 }
@@ -325,10 +325,12 @@ thread_set_priority (int new_priority) {
   thread_current ()->priority = new_priority;
 }
 
-/* Returns the current thread's priority. */
+/**
+ * @brief donation list가 비어있지 않으면 `max(donation_list)`를, 비어있다면 original priority
+ */
 int
 thread_get_priority (void) {
-  return thread_current ()->priority;
+  return get_priority(thread_current());
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -514,6 +516,42 @@ void thread_wakeup() {
 			break;
 	}
 	// 인터럽트에 의해 멱살잡고 끌려나온 스레드를 다시 준비상태로 만들어주어야 함.
+}
+
+struct thread *get_thread_elem(struct list_elem *e) {
+  return list_entry(e, struct thread, elem);
+}
+
+struct thread *get_thread_d_elem(struct list_elem *e) {
+  return list_entry(e, struct thread, d_elem);
+}
+
+int get_priority(struct thread *target) {
+  if (list_empty(&target->donation_list)) {
+    // original priority
+    return target->priority;
+  }
+  // not empty list
+  struct list_elem *max_elem = list_max(&target->donation_list, origin_priority_asc, NULL);
+
+  return get_thread_d_elem(max_elem)->priority;
+}
+
+/**
+ * @brief ready list에 priority 내림차순 정렬
+ */
+bool priority_desc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  struct thread *a_th = list_entry(a, struct thread, elem);
+  struct thread *b_th = list_entry(b, struct thread, elem);
+  
+  return get_priority(a_th) > get_priority(b_th);
+}
+
+bool origin_priority_asc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  struct thread *a_th = list_entry(a, struct thread, elem);
+  struct thread *b_th = list_entry(b, struct thread, elem);
+
+  return a_th->priority < b_th->priority;
 }
 
 /* Switching the thread by activating the new thread's page

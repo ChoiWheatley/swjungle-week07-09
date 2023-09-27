@@ -45,4 +45,8 @@ void cond_broadcast (struct condition *, struct lock *);
  * reference guide for more information.*/
 #define barrier() asm volatile ("" : : : "memory")
 
+/**FIXME - 고쳐주세요 컴파일 에러가 나요*/
+// #define sema_entry(SEMAPHORE) \
+// 	((struct lock *)((uint8_t *) &(SEMAPHORE) - offsetof ((struct lock ), semaphore)))
+
 #endif /* threads/synch.h */

@@ -183,14 +183,50 @@ lock_init (struct lock *lock) {
    interrupt handler.  This function may be called with
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
-void
-lock_acquire (struct lock *lock) {
-	ASSERT (lock != NULL);
-	ASSERT (!intr_context ());
-	ASSERT (!lock_held_by_current_thread (lock));
+void lock_acquire(struct lock *lock) {
+  ASSERT(lock != NULL);
+  ASSERT(!intr_context());
+  ASSERT(!lock_held_by_current_thread(lock));
 
-	sema_down (&lock->semaphore);
-	lock->holder = thread_current ();
+  struct thread *cur = thread_current();
+  struct list *dlist = &lock->holder->donation_list;
+	struct list *waiters = &lock->semaphore.waiters;
+
+  if (lock->semaphore.value == 0 && lock->holder->priority < cur->priority) {
+    // lock 획득에 실패하고 , wait_on_lock을 설정한다.
+
+    if (list_empty(waiters) &&
+        lock->holder->priority < cur->priority) {
+			// 첫빠따로 waiters에 들어가는 경우
+      list_push_back(dlist, &cur->d_elem);
+    } else if (get_thread_d_elem(list_max(waiters, origin_priority_asc, NULL))
+                   ->priority < cur->priority) {
+      cur->wait_on_lock = lock;
+
+      struct list_elem *e;
+
+      for (e = list_begin(dlist); e != list_end(dlist); list_next(e)) {
+        struct thread *e_th = get_thread_d_elem(e);
+        if (e_th->wait_on_lock == lock) {
+          // donation lock의 원소들 중 나와 같은 waiters에 있고
+            //  나의 priority보다 작은 경우 기존 원소를 제거하고 내 것을 추가
+            list_remove(e);
+            list_push_back(dlist, &cur->d_elem);
+        }
+      }
+    }
+  }
+
+  sema_down(&lock->semaphore);
+
+  // 획득한 lock을 기다리는 waiters 중 max_priority를 가진 thread의 d_elem을
+  // donation_list에 추가한다
+  list_push_back(&cur->donation_list,
+                 &get_thread_elem(list_max(&lock->semaphore.waiters,
+                                           origin_priority_asc, NULL))
+                      ->d_elem);
+
+  lock->holder = thread_current();
 }
 
 /* Tries to acquires LOCK and returns true if successful or false

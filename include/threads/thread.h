@@ -92,10 +92,14 @@ struct thread {
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
 	
-	int64_t local_tick; /* NOTE - `timer_sleep`에서 저장할 로컬 틱 */
+	int64_t local_tick; 								/* `timer_sleep`에서 저장할 로컬 틱 */
+	struct lock *wait_on_lock;				  /* 내가 기다리고 있는 lock */
 	
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+	
+	struct list donation_list;					/* 내가 가진 lock들의 waiter들 중 최대 priority를 가진 스레드들의 d_elem 연결리스트*/
+	struct list_elem d_elem; 						/* donation 리스트의 원소 */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -127,7 +131,6 @@ tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
 void thread_unblock (struct thread *);
-void thread_wakeup(); // sleep_list에서 자기 차례가 되면 ready_list로 unblock해서 list_push_back 함수
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
@@ -148,6 +151,16 @@ void do_iret (struct intr_frame *tf);
 
 /** SECTION - Additional Decl */
 void thread_sleep(int64_t ticks);
+void thread_wakeup(); // sleep_list에서 자기 차례가 되면 ready_list로 unblock해서 list_push_back 함수
+
+struct thread *get_thread_elem(struct list_elem *elem);
+struct thread *get_thread_d_elem(struct list_elem *elem);
+
+int get_priority(struct thread *target);
+
+bool tick_ascend(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool priority_desc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool origin_priority_asc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 /** !SECTION - Additional Decl */
 
 #endif /* threads/thread.h */
