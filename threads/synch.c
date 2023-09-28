@@ -66,7 +66,7 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		list_insert_ordered(&sema->waiters, &thread_current ()->elem, origin_priority_dsc, NULL);
 		thread_block ();
 	}
 	sema->value--;
@@ -207,7 +207,7 @@ void lock_acquire(struct lock *lock) {
 				//  나의 priority보다 작은 경우 기존 원소를 제거하고 내 것을
 				//  추가
 				list_remove(&waiter_max->d_elem);
-				list_push_back(dlist, &cur->d_elem);
+				list_insert_ordered(dlist, &cur->d_elem, origin_priority_dsc_d, NULL);
 			}
 		}
 	}

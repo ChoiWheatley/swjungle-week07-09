@@ -564,11 +564,19 @@ bool origin_priority_asc(const struct list_elem *a, const struct list_elem *b, v
   return a_th->priority < b_th->priority;
 }
 
+bool origin_priority_dsc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  return !(origin_priority_asc(a, b, aux));
+}
+
 bool origin_priority_asc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
   struct thread *a_th = get_thread_d_elem(a);
   struct thread *b_th = get_thread_d_elem(b);
 
   return a_th->priority < b_th->priority;
+}
+
+bool origin_priority_dsc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  return !(origin_priority_asc_d(a, b, aux));
 }
 
 /* Switching the thread by activating the new thread's page
