@@ -247,20 +247,24 @@ lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 	
-
-	struct list_elem *waiter_max = list_max(&lock->semaphore.waiters, origin_priority_asc, NULL);
+	struct list *waiters = &lock->semaphore.waiters; // thread::elem 원소들을 가지고 있음.
+	struct list_elem *waiter_max_e = list_max(waiters, origin_priority_asc, NULL);
+	struct thread *waiter_max_t = get_thread_elem(waiter_max_e);
+	struct thread *lock_holder = lock->holder;
 	
-	if (lock->holder->priority < get_thread_elem(waiter_max)->priority) {
-		// donate_list에 원소가 존재하는 경우
-		list_remove(waiter_max);
+	if (lock_holder->priority < waiter_max_t->priority) {
+		// donate_list에 원소가 존재하는 경우 
+		list_remove(&waiter_max_t->d_elem);
 	}
 
 	// unblock된 thread의 priority가 획득할 lock의 waiters 중 max_priority보다 작은 경우
 	// max priority를 가진 thread의 d_elem을 donation_list에 추가한다
-	if (!list_empty(&lock->semaphore.waiters)) {
-		struct thread *soon_unblock = get_thread_elem(list_front(&lock->semaphore.waiters));
-		if (soon_unblock->priority < get_thread_elem(waiter_max)->priority)
-			list_push_back(&soon_unblock->donation_list, &get_thread_elem(waiter_max)->d_elem);
+	if (!list_empty(waiters)) {
+		struct thread *soon_unblock = get_thread_elem(list_front(waiters));
+		if (soon_unblock->priority < waiter_max_t->priority) {
+			// d_list에 추가하기 때문에 `d_elem`을 가리킨다.
+			list_push_back(&soon_unblock->donation_list, &waiter_max_t->d_elem);
+		}
 	}
 
 	lock->holder = NULL;
