@@ -192,7 +192,7 @@ void lock_acquire(struct lock *lock) {
   struct thread *cur = thread_current();
   struct list *dlist = &lock->holder->donation_list;
   struct list *waiters = &lock->semaphore.waiters;
-  struct thread *waiter_max = get_thread_d_elem(list_max(waiters, origin_priority_asc, NULL));
+  struct thread *waiter_max = get_thread_elem(list_max(waiters, origin_priority_asc, NULL));
 
 	if (lock->semaphore.value == 0) {
 		// lock 획득에 실패
@@ -200,7 +200,7 @@ void lock_acquire(struct lock *lock) {
 
 		if (lock->holder->priority < cur->priority) {
 			// do donation
-			if (list_empty(waiters) && lock->holder->priority < cur->priority) {
+			if (list_empty(waiters)) {
 				// 첫빠따로 waiters에 들어가는 경우
 				list_push_back(dlist, &cur->d_elem);
 			} else if (waiter_max->priority < cur->priority) {

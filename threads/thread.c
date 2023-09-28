@@ -543,6 +543,7 @@ int get_priority(struct thread *target) {
   }
   // not empty list
   struct list_elem *max_elem = list_max(&target->donation_list, origin_priority_asc, NULL);
+  
 
   return get_thread_d_elem(max_elem)->priority;
 }
