@@ -191,8 +191,8 @@ void lock_acquire(struct lock *lock) {
 
   struct thread *cur = thread_current();
   struct list *dlist = &lock->holder->donation_list;
-	struct list *waiters = &lock->semaphore.waiters;
-	struct thread *waiter_max = get_thread_d_elem(list_max(waiters, origin_priority_asc, NULL));
+  struct list *waiters = &lock->semaphore.waiters;
+  struct thread *waiter_max = get_thread_d_elem(list_max(waiters, origin_priority_asc, NULL));
 
 	if (lock->semaphore.value == 0) {
 		// lock 획득에 실패
@@ -213,8 +213,6 @@ void lock_acquire(struct lock *lock) {
 	}
 
   sema_down(&lock->semaphore);
-
-
 
   lock->holder = thread_current();
 }

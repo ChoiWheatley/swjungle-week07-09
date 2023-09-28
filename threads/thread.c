@@ -216,7 +216,13 @@ thread_create (const char *name, int priority,
   t->tf.eflags = FLAG_IF;
 
   /* Add to run queue. */
-  thread_unblock (t);
+  thread_unblock(t);
+  /* 
+  * 새로 생성한 priority와 현재 실행중인 priority를 비교해서 새로 생성한 priority가 더 크다면 yield해서 선점  
+  * unblock에서 ready_list에 insert_order하기 때문에 (!list_empty(&ready_list))예외 처리는 생략
+  */
+  if (priority > thread_current()->priority)
+    thread_yield();
 
   return tid;
 }
@@ -323,6 +329,9 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
   thread_current ()->priority = new_priority;
+  /* ready_list가 비어 있지 않고, 새로 생성한 priority와 현재 실행중인 priority를 비교해서 새로 생성한 priority가 더 크다면 yield해서 선점  */
+  if (!list_empty(&ready_list) && thread_current()->priority < get_thread_elem(list_front(&ready_list))->priority)
+    thread_yield();
 }
 
 /**
