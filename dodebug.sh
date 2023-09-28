@@ -2,4 +2,4 @@ cd threads
 make clean
 make
 cd build
-pintos --gdb -- -q run priority-change
+pintos --gdb -- -q run priority-donate-one
