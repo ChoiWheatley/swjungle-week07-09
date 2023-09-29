@@ -536,6 +536,9 @@ struct thread *get_thread_d_elem(const struct list_elem *e) {
   return list_entry(e, struct thread, d_elem);
 }
 
+/**
+ * @brief Get the donated priority RECURSIVELY
+ */
 int get_priority(struct thread *target) {
   if (list_empty(&target->donation_list)) {
     // original priority
@@ -557,6 +560,9 @@ bool priority_dsc(const struct list_elem *a, const struct list_elem *b, void *au
   return get_priority(a_th) > get_priority(b_th);
 }
 
+/**
+ * @brief donate_list에 priority 오름차순 정렬
+ */
 bool priority_asc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
   return !priority_dsc(a, b, aux);
 }
