@@ -11,7 +11,7 @@ tests=(
   priority-preempt #pass
   priority-sema #pass
   priority-condvar #fail
-  priority-donate-sema #fail
+  priority-donate-sema #pass
 )
 workspace_root=$(pwd)
 log_dir="$workspace_root/log"
