@@ -216,7 +216,13 @@ thread_create (const char *name, int priority,
   t->tf.eflags = FLAG_IF;
 
   /* Add to run queue. */
-  thread_unblock (t);
+  thread_unblock(t);
+  /* 
+  * 새로 생성한 priority와 현재 실행중인 priority를 비교해서 새로 생성한 priority가 더 크다면 yield해서 선점  
+  * unblock에서 ready_list에 insert_order하기 때문에 (!list_empty(&ready_list))예외 처리는 생략
+  */
+  if (priority > thread_current()->priority)
+    thread_yield();
 
   return tid;
 }
@@ -323,6 +329,9 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
   thread_current ()->priority = new_priority;
+  /* ready_list가 비어 있지 않고, 새로 생성한 priority와 현재 실행중인 priority를 비교해서 새로 생성한 priority가 더 크다면 yield해서 선점  */
+  if (!list_empty(&ready_list) && thread_current()->priority < get_thread_elem(list_front(&ready_list))->priority)
+    thread_yield();
 }
 
 /**
@@ -519,11 +528,11 @@ void thread_wakeup() {
 	// 인터럽트에 의해 멱살잡고 끌려나온 스레드를 다시 준비상태로 만들어주어야 함.
 }
 
-struct thread *get_thread_elem(struct list_elem *e) {
+struct thread *get_thread_elem(const struct list_elem *e) {
   return list_entry(e, struct thread, elem);
 }
 
-struct thread *get_thread_d_elem(struct list_elem *e) {
+struct thread *get_thread_d_elem(const struct list_elem *e) {
   return list_entry(e, struct thread, d_elem);
 }
 
@@ -533,7 +542,7 @@ int get_priority(struct thread *target) {
     return target->priority;
   }
   // not empty list
-  struct list_elem *max_elem = list_max(&target->donation_list, origin_priority_asc, NULL);
+  struct list_elem *max_elem = list_max(&target->donation_list, origin_priority_asc_d, NULL);
 
   return get_thread_d_elem(max_elem)->priority;
 }
@@ -553,6 +562,21 @@ bool origin_priority_asc(const struct list_elem *a, const struct list_elem *b, v
   struct thread *b_th = list_entry(b, struct thread, elem);
 
   return a_th->priority < b_th->priority;
+}
+
+bool origin_priority_dsc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  return !(origin_priority_asc(a, b, aux));
+}
+
+bool origin_priority_asc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  struct thread *a_th = get_thread_d_elem(a);
+  struct thread *b_th = get_thread_d_elem(b);
+
+  return a_th->priority < b_th->priority;
+}
+
+bool origin_priority_dsc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  return !(origin_priority_asc_d(a, b, aux));
 }
 
 /* Switching the thread by activating the new thread's page
