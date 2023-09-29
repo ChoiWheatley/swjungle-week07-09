@@ -1,17 +1,17 @@
 #!/bin/bash
 tests=(
-  priority-change #pass
-  priority-donate-one #pass
-  priority-donate-multiple #pass
+  priority-change           #pass
+  priority-donate-one       #pass
+  priority-donate-multiple  #pass
   priority-donate-multiple2 #pass
-  priority-donate-nest #pass
-  priority-donate-lower #pass
-  priority-donate-chain #pass
-  priority-fifo #pass
-  priority-preempt #pass
-  priority-sema #pass
-  priority-condvar #fail
-  priority-donate-sema #pass
+  priority-donate-nest      #pass
+  priority-donate-lower     #pass
+  priority-donate-chain     #pass
+  priority-fifo             #pass
+  priority-preempt           #pass
+  priority-sema             #pass
+  priority-condvar          #pass
+  priority-donate-sema      #pass
 )
 workspace_root=$(pwd)
 log_dir="$workspace_root/log"
