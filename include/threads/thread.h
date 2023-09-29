@@ -159,7 +159,10 @@ struct thread *get_thread_d_elem(const struct list_elem *elem);
 int get_priority(struct thread *target);
 
 bool tick_ascend(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
-bool priority_desc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool priority_dsc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool priority_asc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool priority_dsc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool priority_asc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 bool origin_priority_asc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 bool origin_priority_dsc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 bool origin_priority_asc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
