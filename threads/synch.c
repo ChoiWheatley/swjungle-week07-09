@@ -286,9 +286,21 @@ lock_held_by_current_thread (const struct lock *lock) {
 
 /* One semaphore in a list. */
 struct semaphore_elem {
+	int priority;												/* original priority of thread */
 	struct list_elem elem;              /* List element. */
 	struct semaphore semaphore;         /* This semaphore. */
 };
+
+static inline bool priority_asc_semaelem(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	struct semaphore_elem	*a_semaelem = list_entry(a, struct semaphore_elem, elem);
+	struct semaphore_elem	*b_semaelem = list_entry(b, struct semaphore_elem, elem);
+	
+	return a_semaelem->priority < b_semaelem->priority;
+}
+
+static inline bool priority_dsc_semaelem(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	return !priority_asc_semaelem(a, b, aux);
+}
 
 /* Initializes condition variable COND.  A condition variable
    allows one piece of code to signal a condition and cooperating
@@ -330,7 +342,10 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
-	list_push_back (&cond->waiters, &waiter.elem);
+	waiter.priority = thread_current()->priority;
+
+	// 깡통 semaphore_elem 타입을 정렬하기 위해서 구조체를 확장해야만 했습니다.
+	list_insert_ordered (&cond->waiters, &waiter.elem, priority_dsc_semaelem, NULL);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);
