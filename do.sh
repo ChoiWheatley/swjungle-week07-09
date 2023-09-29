@@ -1,16 +1,31 @@
+#!/bin/bash
+tests=(
+  priority-change #pass
+  priority-donate-one #pass
+  priority-donate-multiple #pass
+  priority-donate-multiple2 #pass
+  priority-donate-nest #fail
+  priority-donate-sema #fail
+  priority-donate-lower #pass
+  priority-donate-chain #fail
+  priority-fifo #pass
+  priority-preempt #pass
+  priority-sema #pass
+  priority-condvar #fail"
+)
+workspace_root=$(pwd)
+log_dir="$workspace_root/log"
+
+if [ ! -d "$log_dir" ]; then
+  mkdir -p "$log_dir"
+fi
+
 cd threads
-make clean
-make
+make clean >/dev/null 2>&1
+make >/dev/null 2>&1
 cd build
-pintos -- -q run priority-change      # pass
-pintos -- -q run priority-donate-one  # pass
-pintos -- -q run priority-donate-multiple  # pass
-pintos -- -q run priority-donate-multiple2  # pass
-pintos -- -q run priority-donate-nest  # fail
-pintos -- -q run priority-donate-sema  # fail
-pintos -- -q run priority-donate-lower  # pass
-pintos -- -q run priority-donate-chain  # fail
-pintos -- -q run priority-fifo        # pass
-pintos -- -q run priority-preempt     # pass
-pintos -- -q run priority-sema  # pass
-pintos -- -q run priority-condvar  # fail
+
+for test in ${tests[@]}; do
+  pintos -- -q run $test > "$log_dir/$test.log"
+  echo written output in "$log_dir/$test.log"
+done
