@@ -110,6 +110,7 @@ sema_up (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	if (!list_empty (&sema->waiters)) {
+		// semaphore의 waiter들 중 max priority를 가지는 thread의 elem
 		struct list_elem *max_e = list_max(&sema->waiters, priority_asc, NULL);
 		struct thread *max_t = get_thread_elem(max_e);
 		list_remove(max_e);
@@ -199,16 +200,15 @@ void lock_acquire(struct lock *lock) {
 
 	if (lock->semaphore.value == 0) {
 		// lock 획득에 실패
-		cur->wait_on_lock = lock;
+		cur->wait_on_lock = lock;  // 대기하는 lock 변수에 따로 저장
 
 		if (lock->holder->priority < cur->priority) {
 			// do donation
 			if (list_empty(waiters)) {
-				// 첫빠따로 waiters에 들어가는 경우
+				// 첫 빠따로 waiters에 들어가는 경우
 				list_push_back(dlist, &cur->d_elem);
-			} else if (waiter_max->priority < cur->priority) {
-				//  나의 priority보다 작은 경우 기존 원소를 제거하고 내 것을
-				//  추가
+			} else if (waiter_max->priority < cur->priority) {  // 첫 빠따가 아닌 경우
+				// 기존의 max priority가 현재 thread의 priority보다 작은 경우 기존 d_elem 제거 후 새로 추가
 				list_remove(&waiter_max->d_elem);
 				list_insert_ordered(dlist, &cur->d_elem, origin_priority_dsc_d, NULL);
 			}
@@ -256,7 +256,7 @@ lock_release (struct lock *lock) {
 	struct thread *lock_holder = lock->holder;
 	
 	if (lock_holder->priority < waiter_max_t->priority) {
-		// donate_list에 원소가 존재하는 경우 
+		// donation_list에 donate받은 d_elem이 존재하는 경우, 해당 d_elem 제거
 		list_remove(&waiter_max_t->d_elem);
 	}
 
@@ -281,6 +281,9 @@ struct semaphore_elem {
 	struct semaphore semaphore;         /* This semaphore. */
 };
 
+/**
+ * @brief semaphore_elem의 elem으로 priority 오름차순 정렬
+ */
 static inline bool priority_asc_semaelem(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
 	struct semaphore_elem	*a_semaelem = list_entry(a, struct semaphore_elem, elem);
 	struct semaphore_elem	*b_semaelem = list_entry(b, struct semaphore_elem, elem);
@@ -288,6 +291,9 @@ static inline bool priority_asc_semaelem(const struct list_elem *a, const struct
 	return get_priority(a_semaelem->ptr_th) < get_priority(b_semaelem->ptr_th);
 }
 
+/**
+ * @brief semaphore_elem의 elem으로 priority 내림차순 정렬
+ */
 static inline bool priority_dsc_semaelem(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
 	return !priority_asc_semaelem(a, b, aux);
 }
@@ -334,7 +340,6 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	sema_init (&waiter.semaphore, 0);
 	waiter.ptr_th = thread_current();
 
-	// 깡통 semaphore_elem 타입을 정렬하기 위해서 구조체를 확장해야만 했습니다.
 	list_push_back (&cond->waiters, &waiter.elem);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
@@ -356,6 +361,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	if (!list_empty (&cond->waiters)) {
+		// cond->waiters 중 max priority를 가지는 semaphore_elem의 elem을 깨운다.
 		struct list_elem *max_elem = list_max(&cond->waiters, priority_asc_semaelem, NULL);
 		list_remove(max_elem);
 		sema_up (&list_entry (max_elem, struct semaphore_elem, elem)->semaphore);

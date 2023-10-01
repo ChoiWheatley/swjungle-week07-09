@@ -555,7 +555,7 @@ int get_priority(struct thread *target) {
 }
 
 /**
- * @brief ready list에 priority 내림차순 정렬
+ * @brief elem으로 ready list에 priority 내림차순 정렬
  */
 bool priority_dsc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
   struct thread *a_th = list_entry(a, struct thread, elem);
@@ -565,12 +565,15 @@ bool priority_dsc(const struct list_elem *a, const struct list_elem *b, void *au
 }
 
 /**
- * @brief donate_list에 priority 오름차순 정렬
+ * @brief elem으로 ready_list에 priority 오름차순 정렬
  */
 bool priority_asc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
   return !priority_dsc(a, b, aux);
 }
 
+/**
+ * @brief d_elem으로 donation_list에 priority 내림차순 정렬
+ */
 bool priority_dsc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
   struct thread *a_th = get_thread_d_elem(a);
   struct thread *b_th = get_thread_d_elem(b);
@@ -578,30 +581,46 @@ bool priority_dsc_d(const struct list_elem *a, const struct list_elem *b, void *
   return get_priority(a_th) > get_priority(b_th);
 }
 
+/**
+ * @brief d_elem으로 donation_list에 priority 오름차순 정렬
+ */
 bool priority_asc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
   return !priority_dsc_d(a, b, aux);
 }
 
-bool origin_priority_asc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+/**
+ * @brief elem으로 origin priority 내림차순 정렬
+ */
+bool origin_priority_dsc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+
   struct thread *a_th = list_entry(a, struct thread, elem);
   struct thread *b_th = list_entry(b, struct thread, elem);
 
-  return a_th->priority < b_th->priority;
+  return a_th->priority > b_th->priority;
 }
 
-bool origin_priority_dsc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
-  return !(origin_priority_asc(a, b, aux));
+/**
+ * @brief elem으로 origin priority 오름차순 정렬
+ */
+bool origin_priority_asc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  return !(origin_priority_dsc(a, b, aux));
 }
 
-bool origin_priority_asc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+/**
+ * @brief d_elem으로 origin priority 내림차순 정렬
+ */
+bool origin_priority_dsc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
   struct thread *a_th = get_thread_d_elem(a);
   struct thread *b_th = get_thread_d_elem(b);
 
-  return a_th->priority < b_th->priority;
+  return a_th->priority > b_th->priority;
 }
 
-bool origin_priority_dsc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
-  return !(origin_priority_asc_d(a, b, aux));
+/**
+ * @brief d_elem으로 origin priority 오름차순 정렬
+ */
+bool origin_priority_asc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  return !(origin_priority_dsc_d(a, b, aux));
 }
 
 /* Switching the thread by activating the new thread's page
