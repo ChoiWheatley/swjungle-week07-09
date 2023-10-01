@@ -8,7 +8,7 @@ tests=(
   priority-donate-lower     #pass
   priority-donate-chain     #pass
   priority-fifo             #pass
-  priority-preempt           #pass
+  priority-preempt          #pass
   priority-sema             #pass
   priority-condvar          #pass
   priority-donate-sema      #pass

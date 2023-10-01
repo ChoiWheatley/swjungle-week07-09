@@ -101,8 +101,6 @@ timer_sleep (int64_t ticks) {
 
 	ASSERT (intr_get_level () == INTR_ON);
 	
-	// TODO - 단순 busy wait 하지 말고 sleep_list에 추가하여 block상태로 바꿀 것.
-	// sleep 하는 스레드를 깨우는 건 여기에서 하지 말고 스케줄러에게 맞기자.
 	thread_sleep(ticks);
 }
 
@@ -132,9 +130,6 @@ timer_print_stats (void) {
 
 /**
  * @brief Timer interrupt handler.
- * 
- * TODO - sleep list, min tick을 확인하여 깨울 스레드가 있는지 확인한다.
- * 필요에 따라 스레드를 ready_list에 추가하고 min_tick을 수정한다.
  */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
