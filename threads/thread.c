@@ -342,7 +342,11 @@ thread_get_priority (void) {
   return get_priority(thread_current());
 }
 
-/* Sets the current thread's nice value to NICE. */
+/**
+ * @brief Sets the current thread's nice value to NICE.
+ * @note If the running thread no longer has the highest priority, yields.
+ * @note Calculating Priority 섹션에 가서 계산공식을 확인하기 바람.
+ */
 void
 thread_set_nice (int nice UNUSED) {
   /* TODO: Your implementation goes here */
