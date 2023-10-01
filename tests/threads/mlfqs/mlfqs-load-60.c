@@ -34,8 +34,8 @@
    After 52 seconds, load average=35.38.
    After 54 seconds, load average=36.19.
    After 56 seconds, load average=36.98.
-   After 58 seconds, load average=37.74.
-   After 60 seconds, load average=37.48.
+   After 58 seconds, load average=37.74. // 60초까지는 계속 증가
+   After 60 seconds, load average=37.48. // 이후부터는 감소
    After 62 seconds, load average=36.24.
    After 64 seconds, load average=35.04.
    After 66 seconds, load average=33.88.
@@ -111,6 +111,8 @@ static void load_thread (void *aux);
 
 #define THREAD_CNT 60
 
+/// @brief main thread는 2초마다 `load_avg`를 측정한다. 처음 60초까지는 계속
+/// 증가하다가 그 이후부터는 감소하여야 한다.
 void
 test_mlfqs_load_60 (void) 
 {
@@ -140,6 +142,10 @@ test_mlfqs_load_60 (void)
     }
 }
 
+/// @brief 10초 sleep하고 60초 busy wait하고 다시 60초 sleep한다.
+/// 참고로, sleep할 때 blocking이기 때문에 다른 스레드들도 동시에 잔다.
+/// 인터럽트가 켜져있기 때문에 busy wait 하는 도중에도 활발하게 context
+/// switch가 일어난다.
 static void
 load_thread (void *aux UNUSED) 
 {
