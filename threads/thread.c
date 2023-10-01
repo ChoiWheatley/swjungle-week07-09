@@ -257,7 +257,7 @@ thread_unblock (struct thread *t) {
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered(&ready_list, &t->elem, priority_desc, NULL);
+  list_insert_ordered(&ready_list, &t->elem, priority_dsc, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -320,7 +320,7 @@ thread_yield (void) {
 
   old_level = intr_disable ();
   if (curr != idle_thread)
-    list_insert_ordered(&ready_list, &curr->elem, priority_desc, NULL);
+    list_insert_ordered(&ready_list, &curr->elem, priority_dsc, NULL);
   do_schedule (THREAD_READY);
   intr_set_level (old_level);
 }
@@ -540,47 +540,87 @@ struct thread *get_thread_d_elem(const struct list_elem *e) {
   return list_entry(e, struct thread, d_elem);
 }
 
+/**
+ * @brief Get the donated priority RECURSIVELY
+ */
 int get_priority(struct thread *target) {
   if (list_empty(&target->donation_list)) {
     // original priority
     return target->priority;
   }
   // not empty list
-  struct list_elem *max_elem = list_max(&target->donation_list, origin_priority_asc_d, NULL);
+  struct list_elem *max_elem = list_max(&target->donation_list, priority_asc_d, NULL);
 
-  return get_thread_d_elem(max_elem)->priority;
+  return get_priority(get_thread_d_elem(max_elem));
 }
 
 /**
- * @brief ready list에 priority 내림차순 정렬
+ * @brief elem으로 ready list에 priority 내림차순 정렬
  */
-bool priority_desc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+bool priority_dsc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
   struct thread *a_th = list_entry(a, struct thread, elem);
   struct thread *b_th = list_entry(b, struct thread, elem);
   
   return get_priority(a_th) > get_priority(b_th);
 }
 
-bool origin_priority_asc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+/**
+ * @brief elem으로 ready_list에 priority 오름차순 정렬
+ */
+bool priority_asc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  return !priority_dsc(a, b, aux);
+}
+
+/**
+ * @brief d_elem으로 donation_list에 priority 내림차순 정렬
+ */
+bool priority_dsc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  struct thread *a_th = get_thread_d_elem(a);
+  struct thread *b_th = get_thread_d_elem(b);
+  
+  return get_priority(a_th) > get_priority(b_th);
+}
+
+/**
+ * @brief d_elem으로 donation_list에 priority 오름차순 정렬
+ */
+bool priority_asc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  return !priority_dsc_d(a, b, aux);
+}
+
+/**
+ * @brief elem으로 origin priority 내림차순 정렬
+ */
+bool origin_priority_dsc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+
   struct thread *a_th = list_entry(a, struct thread, elem);
   struct thread *b_th = list_entry(b, struct thread, elem);
 
-  return a_th->priority < b_th->priority;
+  return a_th->priority > b_th->priority;
 }
 
-bool origin_priority_dsc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
-  return !(origin_priority_asc(a, b, aux));
+/**
+ * @brief elem으로 origin priority 오름차순 정렬
+ */
+bool origin_priority_asc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  return !(origin_priority_dsc(a, b, aux));
 }
 
-bool origin_priority_asc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+/**
+ * @brief d_elem으로 origin priority 내림차순 정렬
+ */
+bool origin_priority_dsc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
   struct thread *a_th = get_thread_d_elem(a);
   struct thread *b_th = get_thread_d_elem(b);
 
-  return a_th->priority < b_th->priority;
+  return a_th->priority > b_th->priority;
 }
 
-bool origin_priority_dsc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
-  return !(origin_priority_asc_d(a, b, aux));
+/**
+ * @brief d_elem으로 origin priority 오름차순 정렬
+ */
+bool origin_priority_asc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  return !(origin_priority_dsc_d(a, b, aux));
 }
 
 /* Switching the thread by activating the new thread's page

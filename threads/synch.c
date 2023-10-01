@@ -66,7 +66,7 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_insert_ordered(&sema->waiters, &thread_current ()->elem, origin_priority_dsc, NULL);
+		list_push_back(&sema->waiters, &thread_current ()->elem);
 		thread_block ();
 	}
 	sema->value--;
@@ -109,9 +109,13 @@ sema_up (struct semaphore *sema) {
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
-	if (!list_empty (&sema->waiters))
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem));
+	if (!list_empty (&sema->waiters)) {
+		// semaphore의 waiter들 중 max priority를 가지는 thread의 elem
+		struct list_elem *max_e = list_max(&sema->waiters, priority_asc, NULL);
+		struct thread *max_t = get_thread_elem(max_e);
+		list_remove(max_e);
+		thread_unblock(max_t);
+	}
 	
 	sema->value++;
 	thread_yield(); // ready list 재정렬 후 강제 yield
@@ -196,16 +200,15 @@ void lock_acquire(struct lock *lock) {
 
 	if (lock->semaphore.value == 0) {
 		// lock 획득에 실패
-		cur->wait_on_lock = lock;
+		cur->wait_on_lock = lock;  // 대기하는 lock 변수에 따로 저장
 
 		if (lock->holder->priority < cur->priority) {
 			// do donation
 			if (list_empty(waiters)) {
-				// 첫빠따로 waiters에 들어가는 경우
+				// 첫 빠따로 waiters에 들어가는 경우
 				list_push_back(dlist, &cur->d_elem);
-			} else if (waiter_max->priority < cur->priority) {
-				//  나의 priority보다 작은 경우 기존 원소를 제거하고 내 것을
-				//  추가
+			} else if (waiter_max->priority < cur->priority) {  // 첫 빠따가 아닌 경우
+				// 기존의 max priority가 현재 thread의 priority보다 작은 경우 기존 d_elem 제거 후 새로 추가
 				list_remove(&waiter_max->d_elem);
 				list_insert_ordered(dlist, &cur->d_elem, origin_priority_dsc_d, NULL);
 			}
@@ -253,18 +256,8 @@ lock_release (struct lock *lock) {
 	struct thread *lock_holder = lock->holder;
 	
 	if (lock_holder->priority < waiter_max_t->priority) {
-		// donate_list에 원소가 존재하는 경우 
+		// donation_list에 donate받은 d_elem이 존재하는 경우, 해당 d_elem 제거
 		list_remove(&waiter_max_t->d_elem);
-	}
-
-	// unblock된 thread의 priority가 획득할 lock의 waiters 중 max_priority보다 작은 경우
-	// max priority를 가진 thread의 d_elem을 donation_list에 추가한다
-	if (!list_empty(waiters)) {
-		struct thread *soon_unblock = get_thread_elem(list_front(waiters));
-		if (soon_unblock->priority < waiter_max_t->priority) {
-			// d_list에 추가하기 때문에 `d_elem`을 가리킨다.
-			list_push_back(&soon_unblock->donation_list, &waiter_max_t->d_elem);
-		}
 	}
 
 	lock->holder = NULL;
@@ -283,9 +276,27 @@ lock_held_by_current_thread (const struct lock *lock) {
 
 /* One semaphore in a list. */
 struct semaphore_elem {
+	struct thread *ptr_th;				/* pointer of current thread */
 	struct list_elem elem;              /* List element. */
 	struct semaphore semaphore;         /* This semaphore. */
 };
+
+/**
+ * @brief semaphore_elem의 elem으로 priority 오름차순 정렬
+ */
+static inline bool priority_asc_semaelem(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	struct semaphore_elem	*a_semaelem = list_entry(a, struct semaphore_elem, elem);
+	struct semaphore_elem	*b_semaelem = list_entry(b, struct semaphore_elem, elem);
+	
+	return get_priority(a_semaelem->ptr_th) < get_priority(b_semaelem->ptr_th);
+}
+
+/**
+ * @brief semaphore_elem의 elem으로 priority 내림차순 정렬
+ */
+static inline bool priority_dsc_semaelem(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	return !priority_asc_semaelem(a, b, aux);
+}
 
 /* Initializes condition variable COND.  A condition variable
    allows one piece of code to signal a condition and cooperating
@@ -327,6 +338,8 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
+	waiter.ptr_th = thread_current();
+
 	list_push_back (&cond->waiters, &waiter.elem);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
@@ -347,9 +360,12 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
 
-	if (!list_empty (&cond->waiters))
-		sema_up (&list_entry (list_pop_front (&cond->waiters),
-					struct semaphore_elem, elem)->semaphore);
+	if (!list_empty (&cond->waiters)) {
+		// cond->waiters 중 max priority를 가지는 semaphore_elem의 elem을 깨운다.
+		struct list_elem *max_elem = list_max(&cond->waiters, priority_asc_semaelem, NULL);
+		list_remove(max_elem);
+		sema_up (&list_entry (max_elem, struct semaphore_elem, elem)->semaphore);
+	}
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
