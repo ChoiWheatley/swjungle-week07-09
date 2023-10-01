@@ -169,4 +169,26 @@ bool origin_priority_asc_d(const struct list_elem *a, const struct list_elem *b,
 bool origin_priority_dsc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 /** !SECTION - Additional Decl */
 
+/** SECTION - Fixed Point Arithmetic Operations */
+typedef int32_t fixed_point;
+
+// 17.14 고정소수점 실수
+#define P 17
+#define Q (31 - P)
+#define F (1 << Q)
+#define FLOAT_FIX(n) ((n) * (F))
+#define INT32_T(x) ((x) / (F))
+#define INT32_T_RND(x) \
+  ((x) >= 0) ? ((x) + (F) / 2) / (F) : ((x) - (F) / 2) / (F)
+
+inline fixed_point to_fixed_point(int32_t n) { return FIXED_POINT(n); }
+inline int32_t to_int32_t(fixed_point x) { return INT32_T(x); }
+inline int32_t to_int32_t_rnd(fixed_point x) { return INT32_T_RND(x); }
+inline fixed_point mul(fixed_point x, fixed_point y) { return ((int64_t)x) * y / F; }
+inline fixed_point mul_int(fixed_point x, int32_t n) { return x * n; }
+inline fixed_point div(fixed_point x, fixed_point y) { return ((int64_t)x) * F / y; }
+inline fixed_point div_int(fixed_point x, int32_t n) { return x / n; }
+
+/** !SECTION - Fixed Point Arithmetic Operations */
+
 #endif /* threads/thread.h */
