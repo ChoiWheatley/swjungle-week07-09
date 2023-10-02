@@ -2,4 +2,4 @@ cd threads
 make clean
 make
 cd build
-pintos --gdb -- -q run priority-donate-sema
+pintos --gdb -- $1 -q run $2
