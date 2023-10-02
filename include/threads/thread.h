@@ -91,6 +91,8 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
+	int nice;                           /* 다른 스레드에게 얼마나 CPU time을 퍼줄 것인지 */
+  fixed_point recent_cpu;             /* 스레드가 CPU time을 얼마나 점유하고 있는지 */
 	
 	int64_t local_tick; 								/* `timer_sleep`에서 저장할 로컬 틱 */
 	struct lock *wait_on_lock;				  /* 내가 기다리고 있는 lock */
@@ -157,6 +159,13 @@ struct thread *get_thread_elem(const struct list_elem *elem);
 struct thread *get_thread_d_elem(const struct list_elem *elem);
 
 int get_priority(struct thread *target);
+int get_nice(struct thread *target);
+void set_nice(struct thread *target, int val);
+int get_recent_cpu(struct thread *target);
+void update_recent_cpu(struct thread *target);
+void update_load_avg();
+
+int get_priority_mlfqs(struct thread *target);
 
 bool tick_ascend(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 bool priority_dsc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
@@ -170,24 +179,37 @@ bool origin_priority_asc_d(const struct list_elem *a, const struct list_elem *b,
 /** !SECTION - Additional Decl */
 
 /** SECTION - Fixed Point Arithmetic Operations */
+
+/// @brief 17.14 고정소수점 실수
 typedef int32_t fixed_point;
 
-// 17.14 고정소수점 실수
 #define P 17
 #define Q (31 - P)
 #define F (1 << Q)
-#define FLOAT_FIX(n) ((n) * (F))
+#define FIXED_POINT(n) ((n) * (F))
 #define INT32_T(x) ((x) / (F))
 #define INT32_T_RND(x) \
   ((x) >= 0) ? ((x) + (F) / 2) / (F) : ((x) - (F) / 2) / (F)
+#define FXP_ADD(x, y) ((x) + (y))
+#define FXP_ADD_INT(x, n) ((x) + FIXED_POINT(n))
+#define FXP_SUB(x, y) ((x) - (y))
+#define FXP_SUB_INT(x, n) ((x)-FIXED_POINT(n))
+#define FXP_MUL(x, y) (((int64_t)(x)) * (y) / F)
+#define FXP_MUL_INT(x, n) ((x) * (n))
+#define FXP_DIV(x, y) (((int64_t)(x)) * F / (y))
+#define FXP_DIV_INT(x, n) ((x) / (n))
 
 inline fixed_point to_fixed_point(int32_t n) { return FIXED_POINT(n); }
 inline int32_t to_int32_t(fixed_point x) { return INT32_T(x); }
 inline int32_t to_int32_t_rnd(fixed_point x) { return INT32_T_RND(x); }
-inline fixed_point mul(fixed_point x, fixed_point y) { return ((int64_t)x) * y / F; }
-inline fixed_point mul_int(fixed_point x, int32_t n) { return x * n; }
-inline fixed_point div(fixed_point x, fixed_point y) { return ((int64_t)x) * F / y; }
-inline fixed_point div_int(fixed_point x, int32_t n) { return x / n; }
+inline fixed_point add(fixed_point x, fixed_point y) { return FXP_ADD(x, y); }
+inline fixed_point add_int(fixed_point x, int32_t n) { return FXP_ADD_INT(x, n); }
+inline fixed_point sub(fixed_point x, fixed_point y) { return FXP_SUB(x, y); }
+inline fixed_point sub_int(fixed_point x, int32_t n) { return FXP_SUB_INT(x, n); }
+inline fixed_point mul(fixed_point x, fixed_point y) { return FXP_MUL(x, y); }
+inline fixed_point mul_int(fixed_point x, int32_t n) { return FXP_MUL_INT(x, n); }
+inline fixed_point div(fixed_point x, fixed_point y) { return FXP_DIV(x, y); }
+inline fixed_point div_int(fixed_point x, int32_t n) { return FXP_DIV_INT(x, n); }
 
 /** !SECTION - Fixed Point Arithmetic Operations */
 

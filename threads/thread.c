@@ -61,6 +61,8 @@ static int64_t g_min_tick; // NOTE - sleep_list 스레드들의 최소 local_tic
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
+/// @brief system-wide load average. check **EWMA** on wikipedia
+static fixed_point g_load_avg = 0;
 
 static void kernel_thread (thread_func *, void *aux);
 
@@ -348,29 +350,26 @@ thread_get_priority (void) {
  * @note Calculating Priority 섹션에 가서 계산공식을 확인하기 바람.
  */
 void
-thread_set_nice (int nice UNUSED) {
-  /* TODO: Your implementation goes here */
+thread_set_nice (int nice) {
+  set_nice(thread_current(), nice);
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) {
-  /* TODO: Your implementation goes here */
-  return 0;
+  return get_nice(thread_current());
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) {
-  /* TODO: Your implementation goes here */
-  return 0;
+  return to_int32_t_rnd(mul_int(g_load_avg, 100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) {
-  /* TODO: Your implementation goes here */
-  return 0;
+  return get_recent_cpu(thread_current());
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -544,6 +543,9 @@ struct thread *get_thread_d_elem(const struct list_elem *e) {
  * @brief Get the donated priority RECURSIVELY
  */
 int get_priority(struct thread *target) {
+  if (thread_mlfqs) {
+    return get_priority_mlfqs(target);
+  }
   if (list_empty(&target->donation_list)) {
     // original priority
     return target->priority;
@@ -552,6 +554,64 @@ int get_priority(struct thread *target) {
   struct list_elem *max_elem = list_max(&target->donation_list, priority_asc_d, NULL);
 
   return get_priority(get_thread_d_elem(max_elem));
+}
+
+int get_nice(struct thread *target) {
+  return target->nice;
+}
+
+void set_nice(struct thread *target, int val) { 
+  target->nice = val;
+}
+
+/* Returns 100 times the thread's recent_cpu value. */
+inline int get_recent_cpu(struct thread *target) {
+  return to_int32_t_rnd(mul_int(target->recent_cpu, 100));
+}
+
+/**
+ * @brief 과제페이지가 제공한 공식에 따라 스레드의 `recent_cpu`를 수정한다.
+ * @note `recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * recent_cpu + nice`
+ */
+void update_recent_cpu(struct thread *target) {
+  // fixed_point에 100을 곱한 뒤 int형으로 변환했기 때문에 이를 다시 fixed_point로 변환
+  const fixed_point load_avg = div_int(to_fixed_point(thread_get_load_avg()), 100);
+  const fixed_point recent_cpu = target->recent_cpu;
+  // `(2 * avg) / ((2 * avg) + 1)`
+  const fixed_point decay_rate =
+      div(mul_int(load_avg, 2), add_int(mul_int(load_avg, 2), 2));
+
+  // decay_rate * recent_cpu + nice
+  target->recent_cpu = add_int(mul(decay_rate, recent_cpu), target->nice);
+}
+
+/**
+ * @brief `load_avg = (59/60) * load_avg + (1/60) * ready_threads`
+ * where `ready_threads` is the number of threads that are either running or
+ * ready to run at time of update (not including the idle thread)
+ * @note 1초에 한 번씩 인터럽트 핸들러에 의해 실행되어야 한다.
+ */
+void update_load_avg() {
+  ASSERT(intr_context());
+  ASSERT(intr_get_level() == INTR_OFF);
+
+  const static fixed_point coefficient1 = FXP_DIV_INT(FIXED_POINT(59), 60);
+  const static fixed_point coefficient2 = FXP_DIV_INT(FIXED_POINT(1), 60);
+  const int ready_threads = list_size(&ready_list) + 1;
+  const fixed_point term1 = mul(coefficient1, g_load_avg);
+  const fixed_point term2 = mul_int(coefficient2, ready_threads);
+  
+  // do update
+  g_load_avg = add(term1, term2);
+}
+
+/**
+ * @brief `PRI_MAX - (recent_cpu / 4) - (nice * 2)`
+ */
+int get_priority_mlfqs(struct thread *target) {
+  const int term2 = to_int32_t(div_int(target->recent_cpu, 4));
+  const int term3 = target->nice * 2;
+  return PRI_MAX - term2 - term3;
 }
 
 /**
