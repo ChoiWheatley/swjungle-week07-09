@@ -40,6 +40,13 @@ static struct list g_sleep_list;
  */
 static struct list g_thread_pool;
 
+/**
+ * @brief ready list에 있는 스레드의 개수. 초기값은 1
+ * unblock(create 포함)시 +1
+ * exit, block시 -1
+ */
+static int g_ready_threads = 1;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -130,8 +137,14 @@ thread_init (void) {
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
+
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  initial_thread->recent_cpu = 0;
+  
+  if (thread_mlfqs) {
+    g_ready_threads = 1;
+  }
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -220,6 +233,7 @@ thread_create (const char *name, int priority,
   t->tf.ss = SEL_KDSEG;
   t->tf.cs = SEL_KCSEG;
   t->tf.eflags = FLAG_IF;
+  t->recent_cpu = thread_current()->recent_cpu;
 
   /* Add to run queue. */
   thread_unblock(t);
@@ -243,6 +257,11 @@ void
 thread_block (void) {
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
+
+  if (thread_mlfqs && thread_current() != idle_thread) {
+    g_ready_threads -= 1;
+  }
+
   thread_current ()->status = THREAD_BLOCKED;
   schedule ();
 }
@@ -266,6 +285,10 @@ thread_unblock (struct thread *t) {
   list_insert_ordered(&ready_list, &t->elem, priority_dsc, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
+  
+  if (thread_mlfqs) {
+    g_ready_threads += 1;
+  }
 }
 
 /* Returns the name of the running thread. */
@@ -307,6 +330,11 @@ thread_exit (void) {
 #ifdef USERPROG
   process_exit ();
 #endif
+
+  if (thread_mlfqs) {
+    list_remove(&thread_current()->d_elem);
+    g_ready_threads -= 1;
+  }
 
   /* Just set our status to dying and schedule another process.
      We will be destroyed during the call to schedule_tail(). */
@@ -398,6 +426,11 @@ idle (void *idle_started_ UNUSED) {
 
   idle_thread = thread_current ();
   sema_up (idle_started);
+  
+  if (thread_mlfqs) {
+    g_ready_threads -= 1;
+    list_remove(&idle_thread->d_elem);
+  }
 
   for (;;) {
     /* Let someone else run. */
@@ -447,9 +480,10 @@ init_thread (struct thread *t, const char *name, int priority) {
   list_init(&t->donation_list);
   t->magic = THREAD_MAGIC;
   t->nice = 0;
-  t->recent_cpu = 0;
   
-  list_push_back(&g_thread_pool, &t->d_elem);
+  if (thread_mlfqs) {
+    list_push_back(&g_thread_pool, &t->d_elem);
+  }
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -555,17 +589,30 @@ void update_priority() {
   ASSERT(intr_get_level() == INTR_OFF);
 
   int64_t cur_tick = timer_ticks();
+  struct thread *cur = thread_current();
   
-  if (cur_tick % 4 == 0) {
+  if (thread_mlfqs) {
+    cur->recent_cpu = FXP_ADD_INT(cur->recent_cpu, 1);
+  }
+  
+  if (cur_tick % 4 == 0) { // 4 ticks
     // recalculate priority of all threads
-    if (cur_tick % TIMER_FREQ == 0) {
+    if (cur_tick % TIMER_FREQ == 0) { // 1 seconds
       // recalculate `load_avg`, `recent_cpu` of all thread
       update_load_avg();
-      
-      int32_t load_avg_z = thread_get_load_avg() / 100;
-      int32_t load_avg_r = thread_get_load_avg() % 100;
-      // msg("[%s] load_avg: %d.%02d\n", __func__, load_avg_z, load_avg_r);
+
+      for (struct list_elem *d_elem = list_begin(&g_thread_pool);
+           d_elem != list_end(&g_thread_pool); d_elem = list_next(d_elem)) {
+        update_recent_cpu(get_thread_d_elem(d_elem));
+      }
     }
+    
+    // recalculate priority of all threads
+    for (struct list_elem *d_elem = list_begin(&g_thread_pool);
+         d_elem != list_end(&g_thread_pool); d_elem = list_next(d_elem)) {
+      set_priority_mlfqs(get_thread_d_elem(d_elem));
+    }
+    list_sort(&ready_list, origin_priority_dsc, NULL);
   }
 }
 
@@ -581,9 +628,6 @@ struct thread *get_thread_d_elem(const struct list_elem *e) {
  * @brief Get the donated priority RECURSIVELY
  */
 int get_priority(struct thread *target) {
-  if (thread_mlfqs) {
-    return get_priority_mlfqs(target);
-  }
   if (list_empty(&target->donation_list)) {
     // original priority
     return target->priority;
@@ -613,14 +657,17 @@ inline int get_recent_cpu(struct thread *target) {
  */
 void update_recent_cpu(struct thread *target) {
   // fixed_point에 100을 곱한 뒤 int형으로 변환했기 때문에 이를 다시 fixed_point로 변환
-  const fixed_point load_avg = div_int(to_fixed_point(thread_get_load_avg()), 100);
+  const fixed_point load_avg = g_load_avg;
   const fixed_point recent_cpu = target->recent_cpu;
   // `(2 * avg) / ((2 * avg) + 1)`
   const fixed_point decay_rate =
-      div(mul_int(load_avg, 2), add_int(mul_int(load_avg, 2), 2));
+      FXP_DIV(
+        (FXP_MUL_INT(load_avg, 2)),
+        (FXP_ADD_INT(FXP_MUL_INT(load_avg, 2), 1))
+      );
 
   // decay_rate * recent_cpu + nice
-  target->recent_cpu = add_int(mul(decay_rate, recent_cpu), target->nice);
+  target->recent_cpu = FXP_ADD_INT(FXP_MUL(decay_rate, recent_cpu), target->nice);
 }
 
 /**
@@ -632,11 +679,12 @@ void update_recent_cpu(struct thread *target) {
 void update_load_avg() {
   ASSERT(intr_context());
   ASSERT(intr_get_level() == INTR_OFF);
+  ASSERT(g_ready_threads >= 0);
 
   const static fixed_point coefficient1 = FXP_DIV_INT(FIXED_POINT(59), 60);
   const static fixed_point coefficient2 = FXP_DIV_INT(FIXED_POINT(1), 60);
-  const int ready_threads =
-      list_size(&ready_list) + (thread_current() == idle_thread ? 0 : 1);
+  const int ready_threads = g_ready_threads;
+      // list_size(&ready_list) + (thread_current() == idle_thread ? 0 : 1);
   const fixed_point term1 = mul(coefficient1, g_load_avg);
   const fixed_point term2 = mul_int(coefficient2, ready_threads);
   
@@ -647,10 +695,18 @@ void update_load_avg() {
 /**
  * @brief `PRI_MAX - (recent_cpu / 4) - (nice * 2)`
  */
-int get_priority_mlfqs(struct thread *target) {
+void set_priority_mlfqs(struct thread *target) {
   const int term2 = INT32_T(FXP_DIV_INT(target->recent_cpu, 4));
   const int term3 = target->nice * 2;
-  return PRI_MAX - term2 - term3;
+  int new_priority = PRI_MAX - term2 - term3;
+  
+  if (new_priority > PRI_MAX) {
+    new_priority = PRI_MAX;
+  } else if (new_priority < PRI_MIN) {
+    new_priority = PRI_MIN;
+  }
+
+  target->priority = new_priority;
 }
 
 /**
@@ -660,7 +716,7 @@ bool priority_dsc(const struct list_elem *a, const struct list_elem *b, void *au
   struct thread *a_th = list_entry(a, struct thread, elem);
   struct thread *b_th = list_entry(b, struct thread, elem);
   
-  return get_priority(a_th) > get_priority(b_th);
+    return get_priority(a_th) > get_priority(b_th);
 }
 
 /**
