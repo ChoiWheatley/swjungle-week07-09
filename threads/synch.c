@@ -210,7 +210,7 @@ void lock_acquire(struct lock *lock) {
 			} else if (waiter_max->priority < cur->priority) {  // 첫 빠따가 아닌 경우
 				// 기존의 max priority가 현재 thread의 priority보다 작은 경우 기존 d_elem 제거 후 새로 추가
 				list_remove(&waiter_max->d_elem);
-				list_insert_ordered(dlist, &cur->d_elem, origin_priority_dsc_d, NULL);
+				list_push_back(dlist, &cur->d_elem);
 			}
 		}
 	}
@@ -258,6 +258,18 @@ lock_release (struct lock *lock) {
 	if (lock_holder->priority < waiter_max_t->priority) {
 		// donation_list에 donate받은 d_elem이 존재하는 경우, 해당 d_elem 제거
 		list_remove(&waiter_max_t->d_elem);
+	}
+	
+	// unblock될 thread의 origin_priority가 획득할 lock의 waiters 중 origin_max.priority보다 작은 경우
+	// max priority를 가진 thread의 d_elem을 donation_list에 추가한다
+	if (!list_empty(waiters)) {
+		struct list_elem *waiter_max_donated_e = list_max(waiters, priority_asc, NULL);
+		struct thread *soon_unblock = get_thread_elem(waiter_max_donated_e);
+
+		if (soon_unblock->priority < waiter_max_t->priority) {
+			// d_list에 추가하기 때문에 `d_elem`을 가리킨다.
+			list_push_back(&soon_unblock->donation_list, &waiter_max_t->d_elem);
+		}
 	}
 
 	lock->holder = NULL;
