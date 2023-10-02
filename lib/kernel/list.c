@@ -9,15 +9,15 @@
 
    An empty list looks like this:
 
-   +------+     +------+
+   	   +------+     +------+
    <---| head |<--->| tail |--->
-   +------+     +------+
+   	   +------+     +------+
 
    A list with two elements in it looks like this:
 
-   +------+     +-------+     +-------+     +------+
+       +------+     +-------+     +-------+     +------+
    <---| head |<--->|   1   |<--->|   2   |<--->| tail |<--->
-   +------+     +-------+     +-------+     +------+
+       +------+     +-------+     +-------+     +------+
 
    The symmetry of this arrangement eliminates lots of special
    cases in list processing.  For example, take a look at
