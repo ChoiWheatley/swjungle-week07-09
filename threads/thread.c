@@ -34,6 +34,11 @@ static struct list ready_list;
  * @brief `timer_sleep()`에 의해 추가될 스레드들을 담은 연결리스트
  */
 static struct list g_sleep_list;
+/**
+ * @brief 전체 스레드를 관리하는 리스트, mlfqs에서만 쓰이기 때문에 `d_elem`으로
+ * 연결가능.
+ */
+static struct list g_thread_pool;
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -120,6 +125,7 @@ thread_init (void) {
   list_init (&ready_list);
   list_init (&destruction_req);
   list_init (&g_sleep_list);
+  list_init (&g_thread_pool);
   
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -319,8 +325,9 @@ thread_yield (void) {
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (curr != idle_thread)
+  if (curr != idle_thread) {
     list_insert_ordered(&ready_list, &curr->elem, priority_dsc, NULL);
+  }
   do_schedule (THREAD_READY);
   intr_set_level (old_level);
 }
@@ -441,6 +448,8 @@ init_thread (struct thread *t, const char *name, int priority) {
   t->magic = THREAD_MAGIC;
   t->nice = 0;
   t->recent_cpu = 0;
+  
+  list_push_back(&g_thread_pool, &t->d_elem);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -639,7 +648,7 @@ void update_load_avg() {
  * @brief `PRI_MAX - (recent_cpu / 4) - (nice * 2)`
  */
 int get_priority_mlfqs(struct thread *target) {
-  const int term2 = to_int32_t(div_int(target->recent_cpu, 4));
+  const int term2 = INT32_T(FXP_DIV_INT(target->recent_cpu, 4));
   const int term3 = target->nice * 2;
   return PRI_MAX - term2 - term3;
 }
