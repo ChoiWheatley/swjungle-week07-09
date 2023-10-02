@@ -96,14 +96,14 @@ struct thread {
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
 	
-	int64_t local_tick; 								/* `timer_sleep`에서 저장할 로컬 틱 */
-	struct lock *wait_on_lock;				  /* 내가 기다리고 있는 lock */
+	int64_t local_tick; 				/* `timer_sleep`에서 저장할 로컬 틱 */
+	struct lock *wait_on_lock;			/* 내가 기다리고 있는 lock */
 	
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element used for ready list OR waiters list */
 	
-	struct list donation_list;					/* 내가 가진 lock들의 waiter들 중 최대 priority를 가진 스레드들의 d_elem 연결리스트*/
-	struct list_elem d_elem; 						/* donation 리스트의 원소 */
+	struct list donation_list;			/* 내가 가진 lock들의 waiter들 중 최대 priority를 가진 스레드들의 d_elem 연결리스트*/
+	struct list_elem d_elem; 			/* donation 리스트의 원소 */
 
 	int nice;                           /* 다른 스레드에게 얼마나 CPU time을 퍼줄 것인지 */
   fixed_point recent_cpu;             /* 스레드가 CPU time을 얼마나 점유하고 있는지 */
