@@ -328,6 +328,9 @@ thread_yield (void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
+  if (thread_mlfqs) {
+    return;
+  }
   thread_current ()->priority = new_priority;
   /* ready_list가 비어 있지 않고, 새로 생성한 priority와 현재 실행중인 priority를 비교해서 새로 생성한 priority가 더 크다면 yield해서 선점  */
   if (!list_empty(&ready_list) && thread_current()->priority < get_thread_elem(list_front(&ready_list))->priority)
@@ -339,6 +342,9 @@ thread_set_priority (int new_priority) {
  */
 int
 thread_get_priority (void) {
+  if (thread_mlfqs) {
+    return 0;
+  }
   return get_priority(thread_current());
 }
 
@@ -433,6 +439,8 @@ init_thread (struct thread *t, const char *name, int priority) {
   t->priority = priority;
   list_init(&t->donation_list);
   t->magic = THREAD_MAGIC;
+  t->nice = 0;
+  t->recent_cpu = 0;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -529,6 +537,29 @@ void thread_wakeup() {
 	// 인터럽트에 의해 멱살잡고 끌려나온 스레드를 다시 준비상태로 만들어주어야 함.
 }
 
+/**
+ * @brief Recalcuate `load_avg`, `recent_cpu` of all threads every 1 sec,
+ * Recalculate priority of all threads every 4th tick
+ */
+void update_priority() {
+  ASSERT(intr_context());
+  ASSERT(intr_get_level() == INTR_OFF);
+
+  int64_t cur_tick = timer_ticks();
+  
+  if (cur_tick % 4 == 0) {
+    // recalculate priority of all threads
+    if (cur_tick % TIMER_FREQ == 0) {
+      // recalculate `load_avg`, `recent_cpu` of all thread
+      update_load_avg();
+      
+      int32_t load_avg_z = thread_get_load_avg() / 100;
+      int32_t load_avg_r = thread_get_load_avg() % 100;
+      // msg("[%s] load_avg: %d.%02d\n", __func__, load_avg_z, load_avg_r);
+    }
+  }
+}
+
 struct thread *get_thread_elem(const struct list_elem *e) {
   return list_entry(e, struct thread, elem);
 }
@@ -595,7 +626,8 @@ void update_load_avg() {
 
   const static fixed_point coefficient1 = FXP_DIV_INT(FIXED_POINT(59), 60);
   const static fixed_point coefficient2 = FXP_DIV_INT(FIXED_POINT(1), 60);
-  const int ready_threads = list_size(&ready_list) + 1;
+  const int ready_threads =
+      list_size(&ready_list) + (thread_current() == idle_thread ? 0 : 1);
   const fixed_point term1 = mul(coefficient1, g_load_avg);
   const fixed_point term2 = mul_int(coefficient2, ready_threads);
   

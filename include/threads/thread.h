@@ -95,8 +95,6 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
-	int nice;                           /* 다른 스레드에게 얼마나 CPU time을 퍼줄 것인지 */
-  fixed_point recent_cpu;             /* 스레드가 CPU time을 얼마나 점유하고 있는지 */
 	
 	int64_t local_tick; 								/* `timer_sleep`에서 저장할 로컬 틱 */
 	struct lock *wait_on_lock;				  /* 내가 기다리고 있는 lock */
@@ -107,6 +105,8 @@ struct thread {
 	struct list donation_list;					/* 내가 가진 lock들의 waiter들 중 최대 priority를 가진 스레드들의 d_elem 연결리스트*/
 	struct list_elem d_elem; 						/* donation 리스트의 원소 */
 
+	int nice;                           /* 다른 스레드에게 얼마나 CPU time을 퍼줄 것인지 */
+  fixed_point recent_cpu;             /* 스레드가 CPU time을 얼마나 점유하고 있는지 */
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -115,6 +115,7 @@ struct thread {
 	/* Table for whole virtual memory owned by thread. */
 	struct supplemental_page_table spt;
 #endif
+
 
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
@@ -158,6 +159,7 @@ void do_iret (struct intr_frame *tf);
 /** SECTION - Additional Decl */
 void thread_sleep(int64_t ticks);
 void thread_wakeup(); // sleep_list에서 자기 차례가 되면 ready_list로 unblock해서 list_push_back 함수
+void update_priority();
 
 struct thread *get_thread_elem(const struct list_elem *elem);
 struct thread *get_thread_d_elem(const struct list_elem *elem);
@@ -195,9 +197,9 @@ bool origin_priority_asc_d(const struct list_elem *a, const struct list_elem *b,
 #define FXP_ADD_INT(x, n) ((x) + FIXED_POINT(n))
 #define FXP_SUB(x, y) ((x) - (y))
 #define FXP_SUB_INT(x, n) ((x)-FIXED_POINT(n))
-#define FXP_MUL(x, y) (((int64_t)(x)) * (y) / F)
+#define FXP_MUL(x, y) (fixed_point)(((int64_t)(x)) * (y) / F)
 #define FXP_MUL_INT(x, n) ((x) * (n))
-#define FXP_DIV(x, y) (((int64_t)(x)) * F / (y))
+#define FXP_DIV(x, y) (fixed_point)(((int64_t)(x)) * F / (y))
 #define FXP_DIV_INT(x, n) ((x) / (n))
 
 fixed_point to_fixed_point(int32_t n); 
