@@ -171,7 +171,7 @@ int get_recent_cpu(struct thread *target);
 void update_recent_cpu(struct thread *target);
 void update_load_avg();
 
-int get_priority_mlfqs(struct thread *target);
+void set_priority_mlfqs(struct thread *target);
 
 bool tick_ascend(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 bool priority_dsc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
