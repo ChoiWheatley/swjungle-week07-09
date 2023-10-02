@@ -45,17 +45,9 @@ Project 3에서 팀이 섞이고 코드가 섞이기 때문에 혼란을 최소�
 
 ## Weekly I learned
 
-
 ### Project1: Threads
-
-- prerequisites
-  - [[synchronization]]에 있는 동기화 프로그래밍 이해
-- objectives
-  - [Alarm Clock](./doc/alarm_clock.md)
-  - [Priority Scheduling](./doc/priority_scheduling.md)
-  - [Advanced Scheduler(option)](./doc/advanced_scheduler(option).md)
   
-[[Project1 Threads]]
+[Project1 Threads](doc/Project1%20Threads.md)
 
 ### Project2: User Programs
 
