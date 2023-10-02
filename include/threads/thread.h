@@ -21,6 +21,10 @@ enum thread_status {
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
+
+/// 17.14 고정소수점 실수
+typedef int32_t fixed_point;
+
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
 /* Thread priorities. */
@@ -180,9 +184,6 @@ bool origin_priority_asc_d(const struct list_elem *a, const struct list_elem *b,
 
 /** SECTION - Fixed Point Arithmetic Operations */
 
-/// @brief 17.14 고정소수점 실수
-typedef int32_t fixed_point;
-
 #define P 17
 #define Q (31 - P)
 #define F (1 << Q)
@@ -199,18 +200,17 @@ typedef int32_t fixed_point;
 #define FXP_DIV(x, y) (((int64_t)(x)) * F / (y))
 #define FXP_DIV_INT(x, n) ((x) / (n))
 
-inline fixed_point to_fixed_point(int32_t n) { return FIXED_POINT(n); }
-inline int32_t to_int32_t(fixed_point x) { return INT32_T(x); }
-inline int32_t to_int32_t_rnd(fixed_point x) { return INT32_T_RND(x); }
-inline fixed_point add(fixed_point x, fixed_point y) { return FXP_ADD(x, y); }
-inline fixed_point add_int(fixed_point x, int32_t n) { return FXP_ADD_INT(x, n); }
-inline fixed_point sub(fixed_point x, fixed_point y) { return FXP_SUB(x, y); }
-inline fixed_point sub_int(fixed_point x, int32_t n) { return FXP_SUB_INT(x, n); }
-inline fixed_point mul(fixed_point x, fixed_point y) { return FXP_MUL(x, y); }
-inline fixed_point mul_int(fixed_point x, int32_t n) { return FXP_MUL_INT(x, n); }
-inline fixed_point div(fixed_point x, fixed_point y) { return FXP_DIV(x, y); }
-inline fixed_point div_int(fixed_point x, int32_t n) { return FXP_DIV_INT(x, n); }
-
+fixed_point to_fixed_point(int32_t n); 
+int32_t to_int32_t(fixed_point x); 
+int32_t to_int32_t_rnd(fixed_point x); 
+fixed_point add(fixed_point x, fixed_point y); 
+fixed_point add_int(fixed_point x, int32_t n); 
+fixed_point sub(fixed_point x, fixed_point y); 
+fixed_point sub_int(fixed_point x, int32_t n); 
+fixed_point mul(fixed_point x, fixed_point y); 
+fixed_point mul_int(fixed_point x, int32_t n); 
+fixed_point div(fixed_point x, fixed_point y); 
+fixed_point div_int(fixed_point x, int32_t n); 
 /** !SECTION - Fixed Point Arithmetic Operations */
 
 #endif /* threads/thread.h */

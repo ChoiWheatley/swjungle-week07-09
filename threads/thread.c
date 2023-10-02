@@ -121,8 +121,6 @@ thread_init (void) {
   list_init (&destruction_req);
   list_init (&g_sleep_list);
   
-  printf("[*] g_sleep_list init success!\n");
-
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -822,3 +820,17 @@ allocate_tid (void) {
 
   return tid;
 }
+
+/*SECTION - Fixed Point Arithmetic Definition*/
+fixed_point to_fixed_point(int32_t n) { return FIXED_POINT(n); }
+int32_t to_int32_t(fixed_point x) { return INT32_T(x); }
+int32_t to_int32_t_rnd(fixed_point x) { return INT32_T_RND(x); }
+fixed_point add(fixed_point x, fixed_point y) { return FXP_ADD(x, y); }
+fixed_point add_int(fixed_point x, int32_t n) { return FXP_ADD_INT(x, n); }
+fixed_point sub(fixed_point x, fixed_point y) { return FXP_SUB(x, y); }
+fixed_point sub_int(fixed_point x, int32_t n) { return FXP_SUB_INT(x, n); }
+fixed_point mul(fixed_point x, fixed_point y) { return FXP_MUL(x, y); }
+fixed_point mul_int(fixed_point x, int32_t n) { return FXP_MUL_INT(x, n); }
+fixed_point div(fixed_point x, fixed_point y) { return FXP_DIV(x, y); }
+fixed_point div_int(fixed_point x, int32_t n) { return FXP_DIV_INT(x, n); }
+/*!SECTION - Fixed Point Arithmetic Definition*/
