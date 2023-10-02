@@ -136,11 +136,12 @@ thread_init (void) {
   
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
+  initial_thread->recent_cpu = 0;
   init_thread (initial_thread, "main", PRI_DEFAULT);
 
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-  initial_thread->recent_cpu = 0;
+
   
   if (thread_mlfqs) {
     g_ready_threads = 1;
@@ -233,16 +234,14 @@ thread_create (const char *name, int priority,
   t->tf.ss = SEL_KDSEG;
   t->tf.cs = SEL_KCSEG;
   t->tf.eflags = FLAG_IF;
-  t->recent_cpu = thread_current()->recent_cpu;
-
   /* Add to run queue. */
   thread_unblock(t);
   /* 
   * 새로 생성한 priority와 현재 실행중인 priority를 비교해서 새로 생성한 priority가 더 크다면 yield해서 선점  
   * unblock에서 ready_list에 insert_order하기 때문에 (!list_empty(&ready_list))예외 처리는 생략
   */
-  if (priority > thread_current()->priority)
-    thread_yield();
+
+  thread_yield();
 
   return tid;
 }
@@ -366,10 +365,15 @@ thread_set_priority (int new_priority) {
   if (thread_mlfqs) {
     return;
   }
-  thread_current ()->priority = new_priority;
+  set_priority(thread_current(), new_priority);
+}
+
+void
+set_priority (struct thread *target, int new_priority) {
+  target->priority = new_priority;
   /* ready_list가 비어 있지 않고, 새로 생성한 priority와 현재 실행중인 priority를 비교해서 새로 생성한 priority가 더 크다면 yield해서 선점  */
-  if (!list_empty(&ready_list) && thread_current()->priority < get_thread_elem(list_front(&ready_list))->priority)
-    thread_yield();
+  if (!list_empty(&ready_list) && target->priority < get_thread_elem(list_front(&ready_list))->priority)
+  thread_yield();
 }
 
 /**
@@ -424,13 +428,15 @@ static void
 idle (void *idle_started_ UNUSED) {
   struct semaphore *idle_started = idle_started_;
 
+  thread_set_priority(PRI_MIN);
   idle_thread = thread_current ();
-  sema_up (idle_started);
-  
+
   if (thread_mlfqs) {
     g_ready_threads -= 1;
     list_remove(&idle_thread->d_elem);
   }
+
+  sema_up (idle_started);
 
   for (;;) {
     /* Let someone else run. */
@@ -473,13 +479,24 @@ init_thread (struct thread *t, const char *name, int priority) {
   ASSERT (name != NULL);
 
   memset (t, 0, sizeof *t);
+
+  if (t == initial_thread) {
+    t->nice = 0;
+  } else {
+    t->nice = thread_current()->nice;
+    t->recent_cpu = thread_current()->recent_cpu;
+  }
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
-  t->priority = priority;
   list_init(&t->donation_list);
   t->magic = THREAD_MAGIC;
-  t->nice = 0;
+
+  if (!thread_mlfqs) {
+    t->priority = priority;
+  } else {
+    set_priority_mlfqs(t);
+  }
   
   if (thread_mlfqs) {
     list_push_back(&g_thread_pool, &t->d_elem);
