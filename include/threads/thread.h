@@ -21,6 +21,10 @@ enum thread_status {
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
+
+/// 17.14 고정소수점 실수
+typedef int32_t fixed_point;
+
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
 /* Thread priorities. */
@@ -92,15 +96,17 @@ struct thread {
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
 	
-	int64_t local_tick; 								/* `timer_sleep`에서 저장할 로컬 틱 */
-	struct lock *wait_on_lock;				  /* 내가 기다리고 있는 lock */
+	int64_t local_tick; 				/* `timer_sleep`에서 저장할 로컬 틱 */
+	struct lock *wait_on_lock;			/* 내가 기다리고 있는 lock */
 	
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element used for ready list OR waiters list */
 	
-	struct list donation_list;					/* 내가 가진 lock들의 waiter들 중 최대 priority를 가진 스레드들의 d_elem 연결리스트*/
-	struct list_elem d_elem; 						/* donation 리스트의 원소 */
+	struct list donation_list;			/* 내가 가진 lock들의 waiter들 중 최대 priority를 가진 스레드들의 d_elem 연결리스트*/
+	struct list_elem d_elem; 			/* donation 리스트의 원소 */
 
+	int nice;                           /* 다른 스레드에게 얼마나 CPU time을 퍼줄 것인지 */
+  fixed_point recent_cpu;             /* 스레드가 CPU time을 얼마나 점유하고 있는지 */
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -109,6 +115,7 @@ struct thread {
 	/* Table for whole virtual memory owned by thread. */
 	struct supplemental_page_table spt;
 #endif
+
 
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
@@ -152,11 +159,19 @@ void do_iret (struct intr_frame *tf);
 /** SECTION - Additional Decl */
 void thread_sleep(int64_t ticks);
 void thread_wakeup(); // sleep_list에서 자기 차례가 되면 ready_list로 unblock해서 list_push_back 함수
+void update_priority();
 
 struct thread *get_thread_elem(const struct list_elem *elem);
 struct thread *get_thread_d_elem(const struct list_elem *elem);
 
 int get_priority(struct thread *target);
+int get_nice(struct thread *target);
+void set_nice(struct thread *target, int val);
+int get_recent_cpu(struct thread *target);
+void update_recent_cpu(struct thread *target);
+void update_load_avg();
+
+void set_priority_mlfqs(struct thread *target);
 
 bool tick_ascend(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 bool priority_dsc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
@@ -170,25 +185,34 @@ bool origin_priority_asc_d(const struct list_elem *a, const struct list_elem *b,
 /** !SECTION - Additional Decl */
 
 /** SECTION - Fixed Point Arithmetic Operations */
-typedef int32_t fixed_point;
 
-// 17.14 고정소수점 실수
 #define P 17
 #define Q (31 - P)
 #define F (1 << Q)
-#define FLOAT_FIX(n) ((n) * (F))
+#define FIXED_POINT(n) ((n) * (F))
 #define INT32_T(x) ((x) / (F))
 #define INT32_T_RND(x) \
   ((x) >= 0) ? ((x) + (F) / 2) / (F) : ((x) - (F) / 2) / (F)
+#define FXP_ADD(x, y) ((x) + (y))
+#define FXP_ADD_INT(x, n) ((x) + FIXED_POINT(n))
+#define FXP_SUB(x, y) ((x) - (y))
+#define FXP_SUB_INT(x, n) ((x)-FIXED_POINT(n))
+#define FXP_MUL(x, y) (fixed_point)(((int64_t)(x)) * (y) / F)
+#define FXP_MUL_INT(x, n) ((x) * (n))
+#define FXP_DIV(x, y) (fixed_point)(((int64_t)(x)) * F / (y))
+#define FXP_DIV_INT(x, n) ((x) / (n))
 
-inline fixed_point to_fixed_point(int32_t n) { return FIXED_POINT(n); }
-inline int32_t to_int32_t(fixed_point x) { return INT32_T(x); }
-inline int32_t to_int32_t_rnd(fixed_point x) { return INT32_T_RND(x); }
-inline fixed_point mul(fixed_point x, fixed_point y) { return ((int64_t)x) * y / F; }
-inline fixed_point mul_int(fixed_point x, int32_t n) { return x * n; }
-inline fixed_point div(fixed_point x, fixed_point y) { return ((int64_t)x) * F / y; }
-inline fixed_point div_int(fixed_point x, int32_t n) { return x / n; }
-
+fixed_point to_fixed_point(int32_t n); 
+int32_t to_int32_t(fixed_point x); 
+int32_t to_int32_t_rnd(fixed_point x); 
+fixed_point add(fixed_point x, fixed_point y); 
+fixed_point add_int(fixed_point x, int32_t n); 
+fixed_point sub(fixed_point x, fixed_point y); 
+fixed_point sub_int(fixed_point x, int32_t n); 
+fixed_point mul(fixed_point x, fixed_point y); 
+fixed_point mul_int(fixed_point x, int32_t n); 
+fixed_point div(fixed_point x, fixed_point y); 
+fixed_point div_int(fixed_point x, int32_t n); 
 /** !SECTION - Fixed Point Arithmetic Operations */
 
 #endif /* threads/thread.h */
