@@ -171,70 +171,85 @@ int process_exec(void *f_name)
 {
 	char *file_name = f_name;
 	bool success;
-	int64_t f_name_len = strlen(f_name) + 1;
-	int64_t align = ROUND_UP(f_name_len, sizeof(void *));
+
 	int i;
+
 	char *argv[128];
-	int64_t *tmp = USER_STACK;
-	int64_t *stackptr = tmp;
-	
-	char *temp_argv[128] = {0,};
+	char *temp_argv[128] = {
+		0,
+	};
+
 	char *token, *save_ptr; // Tokenizing을 위한 지역변수 선언
 	int argc = 0;
 
-	// stackptr = USER_STACK - align - ((argc +1)* sizeof(void*));
-
-	// hex_dump(0, stackptr, USER_STACK - (int64_t)stackptr, true);
-
-	memset((void *)(USER_STACK-align), 0, align);
-
-	for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr))
-	{
+	for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)){
 		argv[argc] = token;
 		argc++;
 	}
 
-	/* We cannot use the intr_frame in the thread structure.
-	 * This is because when current thread rescheduled,
-	 * it stores the execution information to the member. */
+	/* Intr_frame 초기화 */
 	struct intr_frame _if;
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
-	/* We first kill the current context */
+	/* 현재 실행 중인 스레드의 컨텍스트 종료 */
 	process_cleanup();
 
-	/* And then load the binary */
+	/* 이후에 바이너리 파일 로드 */
 	success = load(argv[0], &_if);
 
-	for (i = argc - 1; i >= 0; i--)
-	{
-		strlcpy((char *)(tmp - (strlen(argv[i]) + 1)), argv[i], 128);
-		temp_argv[i] = (char *)(tmp - (strlen(argv[i]) + 1));
-		tmp -= (strlen(argv[i]) + 1);
+	char *stackptr = (char *)USER_STACK; // 스택 포인터를 문자열 포인터로 지정
+
+	/* 스택 초기화 */
+	memset(stackptr, 0, USER_STACK - (uint64_t)stackptr);
+	// printf("userstack = %d\n", USER_STACK);
+	/* 인자들을 스택에 복사하고 temp_argv 배열에 저장 */
+	for (i = argc - 1; i >= 0; i--){
+		stackptr -= (strlen(argv[i]) + 1);
+		memcpy(stackptr, argv[i], (strlen(argv[i]) + 1));
+		temp_argv[i] = stackptr;
+		// printf("argv[%d] = %d\n", i, stackptr);
 	}
 
-	tmp = USER_STACK - align - sizeof(void *);
-	for (i = argc; i >= 0; i--)
-	{
-		*tmp = temp_argv[i];
-		tmp -= sizeof(void *);
-	}
-	int64_t *return_addr = NULL;
-	*tmp = return_addr;
+	/* 스택 포인터를 16바이트 경계로 정렬 */
+	stackptr = (char *)(((uint64_t)stackptr) & ~0xf); // 16-byte align
+	// printf("align = %d\n", stackptr);
 
+	/* NULL 포인터를 스택에 추가 */
+	stackptr -= 8;
+	*((int64_t *)stackptr) = (int64_t)temp_argv[argc];
+	temp_argv[argc] = NULL;
+	// printf("argv[2] = %d\n", stackptr);
+
+	/* temp_argv 배열의 주소들을 스택에 저장 */
+	for (i = argc - 1; i >= 0; i--){
+		stackptr -= 8;
+		*((int64_t *)stackptr) = (int64_t)temp_argv[i];
+		// printf("argv[%d] = %d\n", i, stackptr);
+	}
+
+	/* 리턴 주소를 스택에 추가 */
+	char *return_addr = NULL;
+	stackptr -= 8;
+	*((int64_t *)stackptr) = (int64_t)return_addr;
+	// printf("마지막 널값 return_addr = %d\n", stackptr);
+
+	/* 인자 정보 설정 */
 	_if.R.rdi = argc;
-	_if.R.rsi = tmp + sizeof(void *);
+	_if.R.rsi = (int64_t)(stackptr + 8);
+	// printf("rsi(userstack+8) = %d\n", _if.R.rsi);
+	_if.rsp = stackptr;
+	// printf("size = %d\n", USER_STACK - _if.rsp);
+	/* 스택 덤프 출력 */
+	hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 
-	hex_dump(0, stackptr, USER_STACK - (int64_t)stackptr, true);
-
-	/* If load failed, quit. */
-	palloc_free_page(file_name);
+	/* 로드 실패 시 종료 */
+	palloc_free_page(argv[0]);
 	if (!success)
 		return -1;
 
-	/* Start switched process. */
+	/* 프로세스 전환하여 실행 */
 	do_iret(&_if);
 	NOT_REACHED();
 }
@@ -258,8 +273,7 @@ int process_wait(tid_t child_tid UNUSED){
 }
 
 /* Exit the process. This function is called by thread_exit (). */
-void process_exit(void)
-{
+void process_exit(void){
 	struct thread *curr = thread_current();
 	/* TODO: Your code goes here.
 	 * TODO: Implement process termination message (see
@@ -271,8 +285,7 @@ void process_exit(void)
 
 /* Free the current process's resources. */
 static void
-process_cleanup(void)
-{
+process_cleanup(void){
 	struct thread *curr = thread_current();
 
 #ifdef VM
@@ -283,8 +296,7 @@ process_cleanup(void)
 	/* Destroy the current process's page directory and switch back
 	 * to the kernel-only page directory. */
 	pml4 = curr->pml4;
-	if (pml4 != NULL)
-	{
+	if (pml4 != NULL){
 		/* Correct ordering here is crucial.  We must set
 		 * cur->pagedir to NULL before switching page directories,
 		 * so that a timer interrupt can't switch back to the
@@ -300,8 +312,7 @@ process_cleanup(void)
 
 /* Sets up the CPU for running user code in the nest thread.
  * This function is called on every context switch. */
-void process_activate(struct thread *next)
-{
+void process_activate(struct thread *next){
 	/* Activate thread's page tables. */
 	pml4_activate(next->pml4);
 
@@ -330,8 +341,7 @@ void process_activate(struct thread *next)
 
 /* Executable header.  See [ELF1] 1-4 to 1-8.
  * This appears at the very beginning of an ELF binary. */
-struct ELF64_hdr
-{
+struct ELF64_hdr{
 	unsigned char e_ident[EI_NIDENT];
 	uint16_t e_type;
 	uint16_t e_machine;
@@ -348,8 +358,7 @@ struct ELF64_hdr
 	uint16_t e_shstrndx;
 };
 
-struct ELF64_PHDR
-{
+struct ELF64_PHDR{
 	uint32_t p_type;
 	uint32_t p_flags;
 	uint64_t p_offset;
@@ -375,8 +384,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
  * and its initial stack pointer into *RSP.
  * Returns true if successful, false otherwise. */
 static bool
-load(const char *file_name, struct intr_frame *if_)
-{
+load(const char *file_name, struct intr_frame *if_){
 	struct thread *t = thread_current();
 	struct ELF ehdr;
 	struct file *file = NULL;
@@ -392,24 +400,21 @@ load(const char *file_name, struct intr_frame *if_)
 
 	/* Open executable file. */
 	file = filesys_open(file_name);
-	if (file == NULL)
-	{
+	if (file == NULL){
 		printf("load: %s: open failed\n", file_name);
 		goto done;
 	}
 
 	/* Read and verify executable header. */
 	if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr || memcmp(ehdr.e_ident, "\177ELF\2\1\1", 7) || ehdr.e_type != 2 || ehdr.e_machine != 0x3E // amd64
-		|| ehdr.e_version != 1 || ehdr.e_phentsize != sizeof(struct Phdr) || ehdr.e_phnum > 1024)
-	{
+		|| ehdr.e_version != 1 || ehdr.e_phentsize != sizeof(struct Phdr) || ehdr.e_phnum > 1024){
 		printf("load: %s: error loading executable\n", file_name);
 		goto done;
 	}
 
 	/* Read program headers. */
 	file_ofs = ehdr.e_phoff;
-	for (i = 0; i < ehdr.e_phnum; i++)
-	{
+	for (i = 0; i < ehdr.e_phnum; i++){
 		struct Phdr phdr;
 
 		if (file_ofs < 0 || file_ofs > file_length(file))
@@ -433,22 +438,19 @@ load(const char *file_name, struct intr_frame *if_)
 		case PT_SHLIB:
 			goto done;
 		case PT_LOAD:
-			if (validate_segment(&phdr, file))
-			{
+			if (validate_segment(&phdr, file)){
 				bool writable = (phdr.p_flags & PF_W) != 0;
 				uint64_t file_page = phdr.p_offset & ~PGMASK;
 				uint64_t mem_page = phdr.p_vaddr & ~PGMASK;
 				uint64_t page_offset = phdr.p_vaddr & PGMASK;
 				uint32_t read_bytes, zero_bytes;
-				if (phdr.p_filesz > 0)
-				{
+				if (phdr.p_filesz > 0){
 					/* Normal segment.
 					 * Read initial part from disk and zero the rest. */
 					read_bytes = page_offset + phdr.p_filesz;
 					zero_bytes = (ROUND_UP(page_offset + phdr.p_memsz, PGSIZE) - read_bytes);
 				}
-				else
-				{
+				else{
 					/* Entirely zero.
 					 * Don't read anything from disk. */
 					read_bytes = 0;
@@ -485,8 +487,7 @@ done:
 /* Checks whether PHDR describes a valid, loadable segment in
  * FILE and returns true if so, false otherwise. */
 static bool
-validate_segment(const struct Phdr *phdr, struct file *file)
-{
+validate_segment(const struct Phdr *phdr, struct file *file){
 	/* p_offset and p_vaddr must have the same page offset. */
 	if ((phdr->p_offset & PGMASK) != (phdr->p_vaddr & PGMASK))
 		return false;
@@ -551,15 +552,13 @@ static bool install_page(void *upage, void *kpage, bool writable);
  * or disk read error occurs. */
 static bool
 load_segment(struct file *file, off_t ofs, uint8_t *upage,
-			 uint32_t read_bytes, uint32_t zero_bytes, bool writable)
-{
+			 uint32_t read_bytes, uint32_t zero_bytes, bool writable){
 	ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT(pg_ofs(upage) == 0);
 	ASSERT(ofs % PGSIZE == 0);
 
 	file_seek(file, ofs);
-	while (read_bytes > 0 || zero_bytes > 0)
-	{
+	while (read_bytes > 0 || zero_bytes > 0){
 		/* Do calculate how to fill this page.
 		 * We will read PAGE_READ_BYTES bytes from FILE
 		 * and zero the final PAGE_ZERO_BYTES bytes. */
@@ -572,16 +571,14 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 			return false;
 
 		/* Load this page. */
-		if (file_read(file, kpage, page_read_bytes) != (int)page_read_bytes)
-		{
+		if (file_read(file, kpage, page_read_bytes) != (int)page_read_bytes){
 			palloc_free_page(kpage);
 			return false;
 		}
 		memset(kpage + page_read_bytes, 0, page_zero_bytes);
 
 		/* Add the page to the process's address space. */
-		if (!install_page(upage, kpage, writable))
-		{
+		if (!install_page(upage, kpage, writable)){
 			printf("fail\n");
 			palloc_free_page(kpage);
 			return false;
@@ -597,14 +594,12 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 
 /* Create a minimal stack by mapping a zeroed page at the USER_STACK */
 static bool
-setup_stack(struct intr_frame *if_)
-{
+setup_stack(struct intr_frame *if_){
 	uint8_t *kpage;
 	bool success = false;
 
 	kpage = palloc_get_page(PAL_USER | PAL_ZERO);
-	if (kpage != NULL)
-	{
+	if (kpage != NULL){
 		success = install_page(((uint8_t *)USER_STACK) - PGSIZE, kpage, true);
 		if (success)
 			if_->rsp = USER_STACK;
@@ -624,8 +619,7 @@ setup_stack(struct intr_frame *if_)
  * Returns true on success, false if UPAGE is already mapped or
  * if memory allocation fails. */
 static bool
-install_page(void *upage, void *kpage, bool writable)
-{
+install_page(void *upage, void *kpage, bool writable){
 	struct thread *t = thread_current();
 
 	/* Verify that there's not already a page at that virtual
