@@ -31,8 +31,7 @@ static void __do_fork(void *);
 
 /* General process initializer for initd and other process. */
 static void
-process_init(void)
-{
+process_init(void){
 	struct thread *current = thread_current();
 }
 
@@ -41,8 +40,7 @@ process_init(void)
  * before process_create_initd() returns. Returns the initd's
  * thread id, or TID_ERROR if the thread cannot be created.
  * Notice that THIS SHOULD BE CALLED ONCE. */
-tid_t process_create_initd(const char *file_name)
-{
+tid_t process_create_initd(const char *file_name){
 	char *fn_copy;
 	tid_t tid;
 
@@ -62,8 +60,7 @@ tid_t process_create_initd(const char *file_name)
 
 /* A thread function that launches first user process. */
 static void
-initd(void *f_name)
-{
+initd(void *f_name){
 #ifdef VM
 	supplemental_page_table_init(&thread_current()->spt);
 #endif
@@ -77,8 +74,7 @@ initd(void *f_name)
 
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
-tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
-{
+tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED){
 	/* Clone current thread to new thread.*/
 	return thread_create(name,
 						 PRI_DEFAULT, __do_fork, thread_current());
@@ -88,8 +84,7 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 /* Duplicate the parent's address space by passing this function to the
  * pml4_for_each. This is only for the project 2. */
 static bool
-duplicate_pte(uint64_t *pte, void *va, void *aux)
-{
+duplicate_pte(uint64_t *pte, void *va, void *aux){
 	struct thread *current = thread_current();
 	struct thread *parent = (struct thread *)aux;
 	void *parent_page;
@@ -110,8 +105,7 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
-	if (!pml4_set_page(current->pml4, va, newpage, writable))
-	{
+	if (!pml4_set_page(current->pml4, va, newpage, writable)){
 		/* 6. TODO: if fail to insert page, do error handling. */
 	}
 	return true;
@@ -123,8 +117,7 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
  *       That is, you are required to pass second argument of process_fork to
  *       this function. */
 static void
-__do_fork(void *aux)
-{
+__do_fork(void *aux){
 	struct intr_frame if_;
 	struct thread *parent = (struct thread *)aux;
 	struct thread *current = thread_current();
@@ -167,8 +160,7 @@ error:
 
 /* Switch the current execution context to the f_name.
  * Returns -1 on fail. */
-int process_exec(void *f_name)
-{
+int process_exec(void *f_name){
 	char *file_name = f_name;
 	bool success;
 
