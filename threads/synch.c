@@ -118,7 +118,13 @@ sema_up (struct semaphore *sema) {
 	}
 	
 	sema->value++;
-	thread_yield(); // ready list 재정렬 후 강제 yield
+	if(!intr_context()){
+		if(thread_current()->pml4){
+			thread_yield(); // ready list 재정렬 후 강제 yield
+		}
+	}else{
+		intr_yield_on_return();
+	}
 	intr_set_level (old_level);
 }
 
