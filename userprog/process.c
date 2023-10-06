@@ -194,7 +194,6 @@ int process_exec(void *f_name){
 	char *stackptr = (char *)USER_STACK; // 스택 포인터를 문자열 포인터로 지정
 
 	/* 스택 초기화 */
-	memset(stackptr, 0, USER_STACK - (uint64_t)stackptr);
 	// printf("userstack = %d\n", USER_STACK);
 	/* 인자들을 스택에 복사하고 temp_argv 배열에 저장 */
 	for (i = argc - 1; i >= 0; i--){
@@ -204,9 +203,13 @@ int process_exec(void *f_name){
 		// printf("argv[%d] = %d\n", i, stackptr);
 	}
 
-	/* 스택 포인터를 16바이트 경계로 정렬 */
-	stackptr = (char *)(((uint64_t)stackptr) & ~0xf); // 16-byte align
-	// printf("align = %d\n", stackptr);
+	/* 스택 포인터를 8바이트 경계로 정렬 */
+	char *rounded = (char *)(ROUND_DOWN((size_t)stackptr, sizeof(void *))); // 8-byte align
+	
+	/* padding bytes */
+	memset(rounded, 0, stackptr - rounded);
+	
+	stackptr = rounded;
 
 	/* NULL 포인터를 스택에 추가 */
 	stackptr -= 8;
@@ -231,10 +234,10 @@ int process_exec(void *f_name){
 	_if.R.rdi = argc;
 	_if.R.rsi = (int64_t)(stackptr + 8);
 	// printf("rsi(userstack+8) = %d\n", _if.R.rsi);
-	_if.rsp = stackptr;
+	_if.rsp = (uintptr_t)stackptr;
 	// printf("size = %d\n", USER_STACK - _if.rsp);
 	/* 스택 덤프 출력 */
-	hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
+	hex_dump(_if.rsp, (void *)_if.rsp, USER_STACK - _if.rsp, true);
 
 	/* 로드 실패 시 종료 */
 	palloc_free_page(argv[0]);
