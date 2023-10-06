@@ -4,11 +4,16 @@
 #include <syscall-nr.h>
 
 #include "intrinsic.h"
+#include "include/lib/user/syscall.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/loader.h"
 #include "threads/thread.h"
+#include "threads/init.h"
 #include "userprog/gdt.h"
+
+#include "lib/stdio.h"
+#include "userprog/exception.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -62,42 +67,61 @@ void syscall_handler(struct intr_frame *f UNUSED) {
   switch (f->R.rax) {
   case SYS_HALT:
     halt();
+    break;
   case SYS_EXIT:
     exit(f->R.rdi);
+    break;
   case SYS_FORK:
     fork(f->R.rdi);
+    break;
   case SYS_EXEC:
     exec(f->R.rdi);
+    break;
   case SYS_WAIT:
     wait(f->R.rdi);
+    break;
   case SYS_CREATE:
     create(f->R.rdi, f->R.rsi);
+    break;
   case SYS_REMOVE:
     remove(f->R.rdi);
+    break;
   case SYS_OPEN:
     open(f->R.rdi);
+    break;
   case SYS_FILESIZE:
     filesize(f->R.rdi);
+    break;
   case SYS_READ:
     read(f->R.rdi, f->R.rsi, f->R.rdx);
+    break;
   case SYS_WRITE:
     write(f->R.rdi, f->R.rsi, f->R.rdx);
+    break;
   case SYS_SEEK:
     seek(f->R.rdi, f->R.rsi);
+    break;
   case SYS_TELL:
     tell(f->R.rdi);
+    break;
   case SYS_CLOSE:
     close(f->R.rdi);
+    break;
+  default:
+    exit(-1);
   }
-  printf("system call!\n");
-  thread_exit();
+  // printf("system call!\n");
+  // thread_exit();
 }
 
 // SECTION - Project 2 USERPROG SYSTEM CALL
 // SECTION - Process based System Call
 void halt(void) { power_off(); }
 
-void exit(int status) {}
+void exit(int status) {
+  printf("%s: exit(%d)\n", thread_current()->name, status);
+  thread_exit();
+}
 
 pid_t fork(const char *thread_name) {}
 
@@ -114,9 +138,16 @@ int open(const char *file) {}
 
 int filesize(int fd) {}
 
-int read(int fd, void *buffer, unsigned size) {}
+int read(int fd, void *buffer, unsigned size) {
+  check_address(buffer);
+}
 
-int write(int fd, const void *buffer, unsigned size) {}
+int write(int fd, const void *buffer, unsigned size) {
+  check_address(buffer);
+  // FIXME - 디버깅을 위한 임시 stdout 출력용 코드
+  putbuf(buffer, size);
+  return size;
+}
 
 void seek(int fd, unsigned position) {}
 
@@ -125,5 +156,5 @@ unsigned tell(int fd) {}
 void close(int fd) {}
 // !SECTION - File based System Call
 /* Extra */
-int dup2(int oldfd, int newfd) { return 0 }
+int dup2(int oldfd, int newfd) { return 0; }
 // !SECTION - Project 2 USERPROG SYSTEM CALL
