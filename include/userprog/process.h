@@ -10,4 +10,8 @@ int process_wait (tid_t);
 void process_exit (void);
 void process_activate (struct thread *next);
 
+/**SECTION - Additional Decl*/
+void argument_stack(int argc, char **argv, struct intr_frame *if_);
+/**!SECTION - Additional Decl*/
+
 #endif /* userprog/process.h */

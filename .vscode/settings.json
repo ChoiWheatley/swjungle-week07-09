@@ -1,6 +1,17 @@
 {
     "files.associations": {
         "*.html": "html",
-        "list.h": "c"
-    }
+        "list.h": "c",
+        "*.inc": "c",
+        "interrupt.h": "c",
+        "stdlib.h": "c",
+        "stdio.h": "c",
+        "array": "c",
+        "string_view": "c",
+        "initializer_list": "c",
+        "utility": "c"
+    },
+    "C_Cpp.default.defines": [
+        "USERPROG"
+    ]
 }

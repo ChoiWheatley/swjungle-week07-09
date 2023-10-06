@@ -14,7 +14,6 @@
 #include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
-#include "thread.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
