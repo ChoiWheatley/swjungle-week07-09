@@ -22,6 +22,7 @@
 
 #ifdef VM
 #include "vm/vm.h"
+#include "process.h"
 #endif
 
 static void process_cleanup(void);
@@ -163,18 +164,13 @@ error:
 int process_exec(void *f_name){
 	char *file_name = f_name;
 	bool success;
-
 	int i;
-
-	char *argv[128];
-	char *temp_argv[128] = {
-		0,
-	};
-
+	char *argv[128] = {0,};
 	char *token, *save_ptr; // Tokenizing을 위한 지역변수 선언
 	int argc = 0;
 
 	for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)){
+		/* 인자 파싱 */
 		argv[argc] = token;
 		argc++;
 	}
@@ -190,53 +186,10 @@ int process_exec(void *f_name){
 
 	/* 이후에 바이너리 파일 로드 */
 	success = load(argv[0], &_if);
-
-	char *stackptr = (char *)USER_STACK; // 스택 포인터를 문자열 포인터로 지정
-
-	/* 스택 초기화 */
-	// printf("userstack = %d\n", USER_STACK);
-	/* 인자들을 스택에 복사하고 temp_argv 배열에 저장 */
-	for (i = argc - 1; i >= 0; i--){
-		stackptr -= (strlen(argv[i]) + 1);
-		memcpy(stackptr, argv[i], (strlen(argv[i]) + 1));
-		temp_argv[i] = stackptr;
-		// printf("argv[%d] = %d\n", i, stackptr);
-	}
-
-	/* 스택 포인터를 8바이트 경계로 정렬 */
-	char *rounded = (char *)(ROUND_DOWN((size_t)stackptr, sizeof(void *))); // 8-byte align
 	
-	/* padding bytes */
-	memset(rounded, 0, stackptr - rounded);
-	
-	stackptr = rounded;
+	/* 유저스택에 인자 추가 */
+	argument_stack(argc, argv, &_if);
 
-	/* NULL 포인터를 스택에 추가 */
-	stackptr -= 8;
-	*((int64_t *)stackptr) = (int64_t)temp_argv[argc];
-	temp_argv[argc] = NULL;
-	// printf("argv[2] = %d\n", stackptr);
-
-	/* temp_argv 배열의 주소들을 스택에 저장 */
-	for (i = argc - 1; i >= 0; i--){
-		stackptr -= 8;
-		*((int64_t *)stackptr) = (int64_t)temp_argv[i];
-		// printf("argv[%d] = %d\n", i, stackptr);
-	}
-
-	/* 리턴 주소를 스택에 추가 */
-	char *return_addr = NULL;
-	stackptr -= 8;
-	*((int64_t *)stackptr) = (int64_t)return_addr;
-	// printf("마지막 널값 return_addr = %d\n", stackptr);
-
-	/* 인자 정보 설정 */
-	_if.R.rdi = argc;
-	_if.R.rsi = (int64_t)(stackptr + 8);
-	// printf("rsi(userstack+8) = %d\n", _if.R.rsi);
-	_if.rsp = (uintptr_t)stackptr;
-	// printf("size = %d\n", USER_STACK - _if.rsp);
-	/* 스택 덤프 출력 */
 	hex_dump(_if.rsp, (void *)_if.rsp, USER_STACK - _if.rsp, true);
 
 	/* 로드 실패 시 종료 */
@@ -313,6 +266,40 @@ void process_activate(struct thread *next){
 
 	/* Set thread's kernel stack for use in processing interrupts. */
 	tss_update(next);
+}
+
+/**
+ * @brief 초기화된 유저 스택공간에 직접 인자를 추가한다.
+ */
+void argument_stack(int argc, char **argv, struct intr_frame *if_) {
+  char *argv_addr[128];
+
+  for (int i = argc - 1; i >= 0; i--) {
+    int argv_len = strlen(argv[i]);
+    if_->rsp = if_->rsp - (argv_len + 1);
+    memcpy((void *)if_->rsp, argv[i], argv_len + 1);
+    argv_addr[i] = (char *)if_->rsp;
+  }
+
+  while (if_->rsp % 8 != 0) {
+    if_->rsp--;
+    *(uint8_t *)if_->rsp = 0;
+  }
+
+  for (int i = argc; i >= 0; i--) {
+    if_->rsp = if_->rsp - 8;
+    if (i == argc) {
+      memset((void *)if_->rsp, 0, sizeof(char **));
+    } else {
+      memcpy((void *)if_->rsp, &argv_addr[i], sizeof(char **));
+    }
+  }
+
+  if_->R.rdi = argc;
+  if_->R.rsi = if_->rsp;
+
+  if_->rsp = if_->rsp - 8;
+  memset((void *)if_->rsp, 0, sizeof(void *));
 }
 
 /* We load ELF binaries.  The following definitions are taken
