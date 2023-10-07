@@ -226,11 +226,37 @@ int process_exec(void *f_name) {
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
 int process_wait(tid_t child_tid UNUSED) {
-  thread_sleep(150);
+  // thread_sleep(150);
+  // TODO - child_list를 순회. pid 없으면 -1 리턴, 있다면 exited 여부 & exit_status 검사
+  struct thread *curr = thread_current();
+  struct list c_list = curr->child_list;
+  struct list_elem *e;
+  bool is_child = false;
+  if (!list_empty(&c_list)){
+    for (e= list_begin(&c_list); e != list_end(&c_list); e = list_next(e))
+      if (child_tid == list_entry(e, struct child_info, c_elem)->pid) {
+        is_child = true;
+        break;
+      }
+  }
+  if(is_child ){
+    bool exited = list_entry(e, struct child_info, c_elem)->exited;
+    if (exited == 0){
+      sema_init(&curr->wait_sema, 0);
+      sema_down(&curr->wait_sema);
+    }
+
+    int child_status = list_entry(e, struct child_info, c_elem)->exit_status;
+    return child_status;
+  }else{
+    return -1;
+  }
+  
+
   /* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
    * XXX:       to add infinite loop here before
    * XXX:       implementing the process_wait. */
-  // TODO - child_list를 순회. pid 없으면 -1 리턴, 있다면 exited 여부 & exit_status 검사
+  
   /**
    * cases: 
    * - 자식이 살아있는 경우) sema_down until child process die with `exit`
@@ -241,7 +267,6 @@ int process_wait(tid_t child_tid UNUSED) {
    * semaphore를 낮춘다. 이때 semaphore의 값을 0으로 바꿔주어야 한다.
    */
   // sema_down(&thread_current()->wait_sema);
-  return -1;
 }
 
 /* Exit the process. This function is called by thread_exit (). */

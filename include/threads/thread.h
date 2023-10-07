@@ -31,6 +31,8 @@ struct child_info {
 	tid_t pid;
 	int exit_status; // parent process_wait의 반환값
 	bool exited; // exit(비정상 종료 포함)될때 true
+	
+	struct list_elem c_elem;
 };
 
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
