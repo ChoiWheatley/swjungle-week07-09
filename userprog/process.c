@@ -1,4 +1,5 @@
 #include "userprog/process.h"
+#include "userprog/exception.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -186,7 +187,7 @@ int process_exec(void *f_name) {
   /* 유저스택에 인자 추가 */
   argument_stack(argc, argv, &_if);
 
-  hex_dump(_if.rsp, (void *)_if.rsp, USER_STACK - _if.rsp, true);
+  // hex_dump(_if.rsp, (void *)_if.rsp, USER_STACK - _if.rsp, true);
 
   /* 로드 실패 시 종료 */
   palloc_free_page(argv[0]);
@@ -208,8 +209,7 @@ int process_exec(void *f_name) {
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
 int process_wait(tid_t child_tid UNUSED) {
-  while (1) {
-  }
+	thread_sleep(1000);
   /* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
    * XXX:       to add infinite loop here before
    * XXX:       implementing the process_wait. */
@@ -222,7 +222,8 @@ void process_exit(void) {
   /* TODO: Your code goes here.
    * TODO: Implement process termination message (see
    * TODO: project2/process_termination.html).
-   * TODO: We recommend you to implement process resource cleanup here. */
+   * TODO: We recommend you to implement process resource cleanup here. 
+	 * */
 
   process_cleanup();
 }
