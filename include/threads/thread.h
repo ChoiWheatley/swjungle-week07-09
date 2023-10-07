@@ -20,6 +20,12 @@ enum thread_status {
 	THREAD_DYING        /* About to be destroyed. */
 };
 
+struct child_info {
+	pid_t pid;
+	int exit_status;
+	bool exited;
+};
+
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
@@ -112,6 +118,8 @@ struct thread {
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
+	struct list child_list;
+	struct thread *parent;
 	struct semaphore wait_sema;					
 	struct semaphore fork_sema;
 	struct semaphore exit_sema;

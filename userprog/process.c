@@ -223,10 +223,15 @@ int process_exec(void *f_name) {
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
 int process_wait(tid_t child_tid UNUSED) {
-	thread_sleep(1000);
+  thread_sleep(1000);
   /* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
    * XXX:       to add infinite loop here before
    * XXX:       implementing the process_wait. */
+  /**
+   * TODO child가 exit할 때 sema_up을 호출하여 깨어나도록 본인 스레드의
+   * semaphore를 낮춘다.
+   */
+  sema_down(&thread_current()->wait_sema);
   return -1;
 }
 
@@ -238,6 +243,15 @@ void process_exit(void) {
    * TODO: project2/process_termination.html).
    * TODO: We recommend you to implement process resource cleanup here. 
 	 * */
+  sema_up(&curr->parent->wait_sema);
+  sema_up(&curr->parent->exit_sema);
+  sema_up(&curr->parent->fork_sema);
+  
+  // TODO - file 해제
+  
+  // TODO - free page
+  
+  // TODO - 부모 프로세스에게 exit status를 전달
 
   process_cleanup();
 }
