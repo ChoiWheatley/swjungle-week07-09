@@ -247,6 +247,7 @@ int process_wait(tid_t child_tid UNUSED) {
     }
 
     int child_status = list_entry(e, struct child_info, c_elem)->exit_status;
+    list_remove(e);
     return child_status;
   }else{
     return -1;

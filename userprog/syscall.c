@@ -169,9 +169,7 @@ int exec(const char *file) {
   return 0;
 }
 
-int wait(pid_t pid) {
-  return 0;
-}
+int wait(pid_t pid) { return process_wait(pid); }
 //! SECTION - Process based System Call
 // SECTION - File based System Call
 bool create(const char *file, unsigned initial_size) {
