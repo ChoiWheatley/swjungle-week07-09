@@ -7,7 +7,7 @@
 #include <stdbool.h>
 
 #include "intrinsic.h"
-#include "include/threads/synch.h"
+#include "threads/synch.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/loader.h"

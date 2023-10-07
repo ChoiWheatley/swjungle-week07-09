@@ -18,6 +18,9 @@
     "files.associations": {
         "stdio.h": "c",
         "filesys.h": "c",
-        "*.inc": "c"
+        "*.inc": "c",
+        "gdt.h": "c",
+        "intrinsic.h": "c",
+        "syscall.h": "c"
     }
 }
