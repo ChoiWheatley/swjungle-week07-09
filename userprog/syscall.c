@@ -14,6 +14,7 @@
 
 #include "lib/stdio.h"
 #include "userprog/exception.h"
+#include "userprog/process.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -30,24 +31,6 @@ void syscall_handler(struct intr_frame *);
 #define MSR_STAR 0xc0000081         /* Segment selector msr */
 #define MSR_LSTAR 0xc0000082        /* Long mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
-
-void halt(void);
-void exit(int status);
-pid_t fork(const char *thread_name);
-int exec(const char *file);
-int wait(pid_t pid);
-
-bool create(const char *file, unsigned initial_size);
-bool remove(const char *file);
-int open(const char *file);
-int filesize(int fd);
-int read(int fd, void *buffer, unsigned size);
-int write(int fd, const void *buffer, unsigned size);
-void seek(int fd, unsigned position);
-unsigned tell(int fd);
-void close(int fd);
-
-int dup2(int oldfd, int newfd);
 
 void syscall_init(void) {
   write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48 | ((uint64_t)SEL_KCSEG)
@@ -123,7 +106,16 @@ void exit(int status) {
   thread_exit();
 }
 
-pid_t fork(const char *thread_name) {}
+/**
+ * @brief clone parent process's context called by syscall handler
+ * 
+ * @param thread_name 
+ * @return pid_t negative if errr occured, else positive number
+ */
+pid_t fork(const char *thread_name) {
+  check_address(thread_name);
+  process_fork(thread_name, NULL);
+}
 
 int exec(const char *file) {}
 
