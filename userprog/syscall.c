@@ -1,22 +1,41 @@
 #include "userprog/syscall.h"
-#include "include/lib/stdio.h"
-#include "include/lib/user/syscall.h"
+#include "lib/stdio.h"
+#include "lib/user/syscall.h"
 
 #include <stdio.h>
 #include <syscall-nr.h>
+#include <stdbool.h>
 
 #include "intrinsic.h"
-#include "include/threads/synch.h"
+#include "threads/synch.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/loader.h"
 #include "threads/thread.h"
+#include "threads/init.h"
 #include "userprog/gdt.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
+void exit(int status);
+bool create(const char *file, unsigned initial_size);
+bool remove(const char *file);
+int open(const char *file);
+int filesize(int fd);
+int read(int fd, void *buffer, unsigned size);
+int write(int fd, const void *buffer, unsigned size);
+void seek(int fd, unsigned position);
+unsigned tell(int fd);
+void close(int fd);
+void halt(void);
+void exit(int status);
+pid_t fork(const char *thread_name);
+int exec(const char *file);
+int wait(pid_t pid);
+int dup2(int oldfd, int newfd);
+
 
 /* System call.
  *
@@ -133,7 +152,16 @@ void exit(int status) {
   thread_exit();
 }
 
-pid_t fork(const char *thread_name) {}
+/**
+ * @brief clone parent process's context called by syscall handler
+ * 
+ * @param thread_name 
+ * @return pid_t negative if errr occured, else positive number
+ */
+pid_t fork(const char *thread_name) {
+  check_address(thread_name);
+  process_fork(thread_name, NULL);
+}
 
 int exec(const char *file) {
   return 0;

@@ -6,11 +6,19 @@
 #include "threads/thread.h"
 #include "intrinsic.h"
 
+// #include "tests/threads/tests.h" // debug
+#include "userprog/syscall.h"
+
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
+
+/**SECTION - Additional Decl*/
+static int64_t get_user(const uint8_t *uaddr);
+static bool put_user(uint8_t *udst, uint8_t byte);
+/**!SECTION - Additional Decl*/
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -139,6 +147,11 @@ page_fault (struct intr_frame *f) {
 	not_present = (f->error_code & PF_P) == 0;
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
+	
+	if (user) {
+		f->R.rdi = -1;
+		exit(f->R.rdi);
+	}
 
 #ifdef VM
 	/* For project 3 and later. */
@@ -158,6 +171,46 @@ page_fault (struct intr_frame *f) {
 	kill (f);
 }
 
+/* Reads a byte at user virtual address UADDR.
+ * UADDR must be below KERN_BASE.
+ * Returns the byte value if successful, -1 if a segfault
+ * occurred. */
+static int64_t
+get_user (const uint8_t *uaddr) {
+    int64_t result;
+    __asm __volatile (
+    "movabsq $done_get, %0\n"
+    "movzbq %1, %0\n"
+    "done_get:\n"
+    : "=&a" (result) : "m" (*uaddr));
+    return result;
+}
+
+/* Writes BYTE to user address UDST.
+ * UDST must be below KERN_BASE.
+ * Returns true if successful, false if a segfault occurred. */
+static bool
+put_user (uint8_t *udst, uint8_t byte) {
+    int64_t error_code;
+    __asm __volatile (
+    "movabsq $done_put, %0\n"
+    "movb %b2, %1\n"
+    "done_put:\n"
+    : "=&a" (error_code), "=m" (*udst) : "q" (byte));
+    return error_code != -1;
+}
+
+/**
+ * @brief 사용자 주소가 유효한지 여부를 판단한다. 두 가지 검사를 수행한다.
+ * 1. 주소값이 KERN_BASE보다 크다면 커널주소를 참조하려고 하기 때문에 page
+ * fault를 발생시켜 프로세스를 종료시켜야 한다.
+ * 2. 할당이 안된 영역을 참조하려고 한다면 segfault를 발생시켜 프로세스를
+ * 종료시켜야 한다.
+ *
+ * @param uaddr 유저 프로그램이 syscall을 통해 요청한 주소
+ * @return 주소가 유효한지 여부
+ * @note 해당 함수는 유저 프로그램을 종료시켜줍니다.
+ */
 void check_address(const void *uaddr) {
   if (is_kernel_vaddr(uaddr) || pml4_get_page(thread_current()->pml4, uaddr) == NULL) {
 		exit(-1);
