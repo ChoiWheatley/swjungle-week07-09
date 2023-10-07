@@ -106,10 +106,14 @@ struct thread {
 	struct list_elem d_elem; 			/* donation 리스트의 원소 */
 
 	int nice;                           /* 다른 스레드에게 얼마나 CPU time을 퍼줄 것인지 */
-  fixed_point recent_cpu;             /* 스레드가 CPU time을 얼마나 점유하고 있는지 */
+  	fixed_point recent_cpu;             /* 스레드가 CPU time을 얼마나 점유하고 있는지 */
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
+	int exit_status;					/* exit 했는지 확인하기 위한 status */
+	int fd_idx;
+
 	uint64_t *pml4;                     /* Page map level 4 */
+	struct file **fd_table;					/* file descriptor table */
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
@@ -214,5 +218,10 @@ fixed_point mul_int(fixed_point x, int32_t n);
 fixed_point div(fixed_point x, fixed_point y); 
 fixed_point div_int(fixed_point x, int32_t n); 
 /** !SECTION - Fixed Point Arithmetic Operations */
+
+/* SECTION - USER PROGRAM */
+#define FDT_PAGES 3
+#define FDCOUNT_LIMIT FDT_PAGES *(1<<9)
+/* !SECTION - USER PROGRAM */
 
 #endif /* threads/thread.h */
