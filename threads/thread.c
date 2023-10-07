@@ -14,6 +14,7 @@
 #include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "lib/user/syscall.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -320,10 +321,11 @@ thread_tid (void) {
   return thread_current ()->tid;
 }
 
-/* Deschedules the current thread and destroys it.  Never
-   returns to the caller. */
-void
-thread_exit (void) {
+/** @brief Deschedules the current thread and destroys it.  Never
+ * returns to the caller.
+ * 
+ */
+void thread_exit(void) {
   ASSERT (!intr_context ());
 
 #ifdef USERPROG
