@@ -1,4 +1,5 @@
 #include "userprog/process.h"
+#include "userprog/exception.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -94,35 +95,47 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux) {
   parent_page = pml4_get_page(parent->pml4, va);
 
   /* 3. TODO: Allocate new PAL_USER page for the child and set result to
-   *    TODO: NEWPAGE. */
+   *    TODO: NEWPAGE. 
+   * 유저 페이지 할당
+   */
 
   /* 4. TODO: Duplicate parent's page to the new page and
    *    TODO: check whether parent's page is writable or not (set WRITABLE
-   *    TODO: according to the result). */
+   *    TODO: according to the result). 
+   * 기존 페이지를 새 페이지에 복제한다.
+   * */
 
   /* 5. Add new page to child's page table at address VA with WRITABLE
-   *    permission. */
+   *    permission. 
+   * 페이지에 권한부여
+   */
   if (!pml4_set_page(current->pml4, va, newpage, writable)) {
-    /* 6. TODO: if fail to insert page, do error handling. */
+    /* 6. TODO: if fail to insert page, do error handling. 
+     * 에러 핸들링
+    */
   }
   return true;
 }
 #endif
 
-/* A thread function that copies parent's execution context.
- * Hint) parent->tf does not hold the userland context of the process.
+/**
+ * @brief A thread function that copies parent's execution context.
+ * @note - parent->tf does not hold the userland context of the process.
  *       That is, you are required to pass second argument of process_fork to
- *       this function. */
+ *       this function.
+ * @note - process_exec과의 유일한 차이점은 parent의 컨텍스트와 file, lock, page를
+ * 몽땅 복사한다는 점이다. Project 3 Virtual Memory에서 Copy On Write를 하기
+ * 전까지는 모든 내용을 복제하는 것으로 보인다.
+ */
 static void __do_fork(void *aux) {
   struct intr_frame if_;
-  struct thread *parent = (struct thread *)aux;
+  struct thread *parent = (struct thread *)aux; // `thread_current()` of parent
   struct thread *current = thread_current();
-  /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-  struct intr_frame *parent_if;
+  struct intr_frame *parent_if = &parent->tf;
   bool succ = true;
 
   /* 1. Read the cpu context to local stack. */
-  memcpy(&if_, parent_if, sizeof(struct intr_frame));
+  memcpy((void *)&if_, parent_if, sizeof(struct intr_frame));
 
   /* 2. Duplicate PT */
   current->pml4 = pml4_create();
@@ -135,15 +148,17 @@ static void __do_fork(void *aux) {
   if (!supplemental_page_table_copy(&current->spt, &parent->spt))
     goto error;
 #else
+  // TODO - 페이지 테이블 복제
   if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
     goto error;
 #endif
 
-  /* TODO: Your code goes here.
-   * TODO: Hint) To duplicate the file object, use `file_duplicate`
-   * TODO:       in include/filesys/file.h. Note that parent should not return
-   * TODO:       from the fork() until this function successfully duplicates
-   * TODO:       the resources of parent.*/
+  /* TODO: File Descriptor Table 복제
+   * Hint) To duplicate the file object, use `file_duplicate`
+   *       in include/filesys/file.h. Note that parent should not return
+   *       from the fork() until this function successfully duplicates
+   *       the resources of parent.
+   */
 
   process_init();
 
@@ -210,10 +225,15 @@ int process_exec(void *f_name) {
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
 int process_wait(tid_t child_tid UNUSED) {
-  thread_sleep(1000);
+  thread_sleep(150);
   /* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
    * XXX:       to add infinite loop here before
    * XXX:       implementing the process_wait. */
+  /**
+   * TODO child가 exit할 때 sema_up을 호출하여 깨어나도록 본인 스레드의
+   * semaphore를 낮춘다.
+   */
+  // sema_down(&thread_current()->wait_sema);
   return -1;
 }
 
@@ -223,7 +243,17 @@ void process_exit(void) {
   /* TODO: Your code goes here.
    * TODO: Implement process termination message (see
    * TODO: project2/process_termination.html).
-   * TODO: We recommend you to implement process resource cleanup here. */
+   * TODO: We recommend you to implement process resource cleanup here. 
+	 * */
+  // sema_up(&curr->parent->wait_sema);
+  // sema_up(&curr->parent->exit_sema);
+  // sema_up(&curr->parent->fork_sema);
+  
+  // TODO - file 해제
+  
+  // TODO - free page
+  
+  // TODO - 부모 프로세스에게 exit status를 전달
 
   process_cleanup();
 }

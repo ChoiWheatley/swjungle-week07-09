@@ -4,6 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+
+#include "threads/synch.h"
 #include "threads/interrupt.h"
 #ifdef VM
 #include "vm/vm.h"
@@ -24,6 +26,12 @@ typedef int tid_t;
 
 /// 17.14 고정소수점 실수
 typedef int32_t fixed_point;
+
+struct child_info {
+	tid_t pid;
+	int exit_status;
+	bool exited;
+};
 
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
@@ -114,6 +122,11 @@ struct thread {
 
 	uint64_t *pml4;                     /* Page map level 4 */
 	struct file **fd_table;					/* file descriptor table */
+	// struct list child_list;
+	struct thread *parent;
+	struct semaphore wait_sema;					
+	struct semaphore fork_sema;
+	struct semaphore exit_sema;
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */

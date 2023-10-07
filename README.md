@@ -65,9 +65,9 @@ Project 3에서 팀이 섞이고 코드가 섞이기 때문에 혼란을 최소�
 
 ## Coding Convention
 
-C 코드 포매팅은 [clang-format](https://clang.llvm.org/docs/ClangFormat.html)을 사용할 예정입니다. vs-code의 C/C++ 익스텐션 자체로 clang-format을 지원하기 때문에 설정만 같은 값으로 맞춰주면 됩니다. 다양한 회사들의 코딩 컨벤션을 갈아끼우기 쉽게 만들었기 때문에 구체적으로 어떤 회사의 컨벤션을 따라야 할 건지는 정해봐야 알겠습니다.
+C 코드 포매팅 (`C_Cpp.clang_format_style`)은 LLVM을 사용합니다. 일단 자주 사용하는 파일만 전체 포매팅 돌렸습니다.
 
-[Doxygen Documentation Generator](https://marketplace.visualstudio.com/items?itemName=cschlosser.doxdocgen)를 사용하여 기존에 `///`를 사용한 docstring 자동생성에 더 많은 기능과 자동완성을 제공해 줄 수 있습니다.
+[Doxygen Documentation Generator](https://marketplace.visualstudio.com/items?itemName=cschlosser.doxdocgen)를 사용하여 기존에 `///` 또는 `/***/`을 사용한 docstring 자동생성에 더 많은 기능과 자동완성을 제공해 줄 수 있습니다.
 
 [Markdown Lint](https://marketplace.visualstudio.com/items?itemName=DavidAnson.vscode-markdownlint)는 md파일을 작성할 때 파일 깨지는 현상을 사전에 방지해 줄 수 있습니다.
 
