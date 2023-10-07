@@ -160,7 +160,9 @@ void exit(int status) {
  */
 pid_t fork(const char *thread_name) {
   check_address(thread_name);
-  process_fork(thread_name, NULL);
+  // TODO - do wait until child process done fork 
+  // sema_down(cur.fork_sema)
+  return process_fork(thread_name, NULL);
 }
 
 int exec(const char *file) {

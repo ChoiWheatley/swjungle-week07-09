@@ -163,6 +163,7 @@ static void __do_fork(void *aux) {
   process_init();
 
   /* Finally, switch to the newly created process. */
+  // TODO - sema_up(parent.fork_sema)
   if (succ)
     do_iret(&if_);
 error:
@@ -229,9 +230,15 @@ int process_wait(tid_t child_tid UNUSED) {
   /* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
    * XXX:       to add infinite loop here before
    * XXX:       implementing the process_wait. */
+  // TODO - child_list를 순회. pid 없으면 -1 리턴, 있다면 exited 여부 & exit_status 검사
   /**
+   * cases: 
+   * - 자식이 살아있는 경우) sema_down until child process die with `exit`
+   * - 자식이 살아있었는데 비정상적으로 종료된 경우) 자식이 sema_up을 해주고 죽어야 함.
+   * - 자식이 이미 죽은 경우) exited이 true라서 바로 exit_status를 리턴.
+   * 
    * TODO child가 exit할 때 sema_up을 호출하여 깨어나도록 본인 스레드의
-   * semaphore를 낮춘다.
+   * semaphore를 낮춘다. 이때 semaphore의 값을 0으로 바꿔주어야 한다.
    */
   // sema_down(&thread_current()->wait_sema);
   return -1;
@@ -244,16 +251,15 @@ void process_exit(void) {
    * TODO: Implement process termination message (see
    * TODO: project2/process_termination.html).
    * TODO: We recommend you to implement process resource cleanup here. 
+   * - file 해제
+   * - free page (malloced memory?)
+   * - 모든 semaphore up
+   * - 부모의 child_list 원소를 수정. { exit_status, exited }
+   * - 부모 프로세스에게 exit status를 전달
 	 * */
+
   // sema_up(&curr->parent->wait_sema);
-  // sema_up(&curr->parent->exit_sema);
-  // sema_up(&curr->parent->fork_sema);
-  
-  // TODO - file 해제
-  
-  // TODO - free page
-  
-  // TODO - 부모 프로세스에게 exit status를 전달
+  // sema_up(&curr->parent->exit_sema); 뭐 하는 놈인지
 
   process_cleanup();
 }
