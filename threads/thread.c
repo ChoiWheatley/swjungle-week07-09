@@ -233,6 +233,17 @@ thread_create (const char *name, int priority,
   t->tf.ss = SEL_KDSEG;
   t->tf.cs = SEL_KCSEG;
   t->tf.eflags = FLAG_IF;
+
+#ifdef USERPROG
+  t->fd_table = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
+  if (t->fd_table == NULL) {
+    return TID_ERROR;
+  }
+  t->fd_idx = 2;
+  t->fd_table[0] = 1;   // stdin 자리 : 1 배정
+  t->fd_table[1] = 2;   // stdout 자리 : 2 배정
+#endif  /* USERPROG */
+
   /* Add to run queue. */
   thread_unblock(t);
   /* 
@@ -497,11 +508,12 @@ init_thread (struct thread *t, const char *name, int priority) {
     t->priority = priority;
   } else {
     set_priority_mlfqs(t);
-  }
-  
-  if (thread_mlfqs) {
     list_push_back(&g_thread_pool, &t->d_elem);
   }
+
+#ifdef USERPROG
+  t->exit_status = 0;
+#endif
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

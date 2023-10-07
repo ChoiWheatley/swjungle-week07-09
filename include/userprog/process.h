@@ -12,6 +12,7 @@ void process_activate (struct thread *next);
 
 /**SECTION - Additional Decl*/
 void argument_stack(int argc, char **argv, struct intr_frame *if_);
+
 /**!SECTION - Additional Decl*/
 
 #endif /* userprog/process.h */

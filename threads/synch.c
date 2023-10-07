@@ -109,27 +109,19 @@ sema_up (struct semaphore *sema) {
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
+
+	sema->value++;
+
 	if (!list_empty (&sema->waiters)) {
 		// semaphore의 waiter들 중 max priority를 가지는 thread의 elem
 		struct list_elem *max_e = list_max(&sema->waiters, priority_asc, NULL);
 		struct thread *max_t = get_thread_elem(max_e);
 		list_remove(max_e);
 		thread_unblock(max_t);
-	}
-	
-	sema->value++;
-	
-	if(!intr_context()){
-		#ifdef USERPROG
-		if(thread_current()->pml4){
-			thread_yield(); // ready list 재정렬 후 강제 yield
+		if (!intr_context() && get_priority(max_t) > thread_get_priority()) {
+			thread_yield();
 		}
-		#else
-		thread_yield();
-		#endif // USERPROG
-	}else{
-		intr_yield_on_return();
-	}
+    }
 	
 	intr_set_level (old_level);
 }

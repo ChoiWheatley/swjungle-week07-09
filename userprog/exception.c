@@ -158,3 +158,8 @@ page_fault (struct intr_frame *f) {
 	kill (f);
 }
 
+void check_address(const void *uaddr) {
+  if (is_kernel_vaddr(uaddr) || pml4_get_page(thread_current()->pml4, uaddr) == NULL) {
+		exit(-1);
+  } 
+}

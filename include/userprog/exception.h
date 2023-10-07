@@ -9,4 +9,6 @@
 void exception_init (void);
 void exception_print_stats (void);
 
+void check_address(const void *uaddr);
+
 #endif /* userprog/exception.h */
