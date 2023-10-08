@@ -138,7 +138,7 @@ struct thread {
 
   /* Owned by thread.c. */
   struct intr_frame tf; /* Information for switching */
-  struct intr_frame bf;
+  struct intr_frame bf; /* interrrupt frame backup (user-level 정보) */
   unsigned magic;       /* Detects stack overflow. */
 };
 
