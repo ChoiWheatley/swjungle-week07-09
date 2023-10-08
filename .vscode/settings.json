@@ -21,6 +21,8 @@
         "*.inc": "c",
         "gdt.h": "c",
         "intrinsic.h": "c",
-        "syscall.h": "c"
+        "syscall.h": "c",
+        "file.h": "c",
+        "synch.h": "c"
     }
 }

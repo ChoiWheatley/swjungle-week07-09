@@ -1,5 +1,4 @@
 #include "userprog/process.h"
-#include "userprog/exception.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -12,6 +11,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "userprog/exception.h"
 #include "userprog/gdt.h"
 #include "userprog/tss.h"
 #include <debug.h>
@@ -75,8 +75,34 @@ static void initd(void *f_name) {
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
 tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED) {
+  // TODO - do wait until child process done fork
+  struct thread *cur = thread_current();
+  struct list_elem *e;
+  struct list *c_list = &cur->child_list;
+  struct thread *child_th;
+  struct child_info *ch_info;
+
   /* Clone current thread to new thread.*/
-  return thread_create(name, PRI_DEFAULT, __do_fork, thread_current());
+  tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, thread_current());
+  if (tid == TID_ERROR) {
+    return TID_ERROR;
+  }
+  // cur(부모)의 child_list에 위에서 create한 자식의 child_info의 c_elem이 들어가있다.
+  // 방금 추가된 child_info를 tid로 찾는다.
+  // 찾은 tid로 방금 생성된 thread를 찾는다.
+  // 방금 생성된 thread의 fork_sema를 sema_down한다.
+  for (e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
+    ch_info = list_entry(e, struct child_info, c_elem);  // 자식의 유서
+    if (tid == ch_info->pid) {  // 기다리려는 자식이 맞다면
+      child_th = ch_info->th;  // 자식의 thread// 내 자식이 맞다!
+      sema_down(&child_th->fork_sema);
+      break;
+    }
+  }
+  if (child_th->exit_status == -1) {
+    return TID_ERROR;
+  }
+  return tid;
 }
 
 #ifndef VM
@@ -90,29 +116,44 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux) {
   bool writable;
 
   /* 1. TODO: If the parent_page is kernel page, then return immediately. */
+  if (is_kernel_vaddr(va)) {
+    return true;
+  }
 
   /* 2. Resolve VA from the parent's page map level 4. */
   parent_page = pml4_get_page(parent->pml4, va);
+  if (parent_page == NULL) {
+    printf("[fork-duplicate] failed to fetch page for user vaddr 'va'\n");
+    return false;
+  }
 
   /* 3. TODO: Allocate new PAL_USER page for the child and set result to
-   *    TODO: NEWPAGE. 
+   *    TODO: NEWPAGE.
    * 유저 페이지 할당
    */
+  newpage = palloc_get_page(PAL_USER | PAL_ZERO);
+  if (newpage == NULL) {
+    printf("[fork-duplicate] failed to palloc new page\n");
+    return false;
+  }
 
   /* 4. TODO: Duplicate parent's page to the new page and
    *    TODO: check whether parent's page is writable or not (set WRITABLE
-   *    TODO: according to the result). 
+   *    TODO: according to the result).
    * 기존 페이지를 새 페이지에 복제한다.
    * */
-
+  memcpy(newpage, parent_page, PGSIZE);
+  writable = is_writable(pte);
   /* 5. Add new page to child's page table at address VA with WRITABLE
-   *    permission. 
+   *    permission.
    * 페이지에 권한부여
    */
   if (!pml4_set_page(current->pml4, va, newpage, writable)) {
-    /* 6. TODO: if fail to insert page, do error handling. 
+    /* 6. TODO: if fail to insert page, do error handling.
      * 에러 핸들링
-    */
+     */
+    printf("Failed to map user virtual page to given physical frame\n");
+    return false;
   }
   return true;
 }
@@ -123,15 +164,15 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux) {
  * @note - parent->tf does not hold the userland context of the process.
  *       That is, you are required to pass second argument of process_fork to
  *       this function.
- * @note - process_exec과의 유일한 차이점은 parent의 컨텍스트와 file, lock, page를
- * 몽땅 복사한다는 점이다. Project 3 Virtual Memory에서 Copy On Write를 하기
- * 전까지는 모든 내용을 복제하는 것으로 보인다.
+ * @note - process_exec과의 유일한 차이점은 parent의 컨텍스트와 file, lock,
+ * page를 몽땅 복사한다는 점이다. Project 3 Virtual Memory에서 Copy On Write를
+ * 하기 전까지는 모든 내용을 복제하는 것으로 보인다.
  */
 static void __do_fork(void *aux) {
   struct intr_frame if_;
   struct thread *parent = (struct thread *)aux; // `thread_current()` of parent
   struct thread *current = thread_current();
-  struct intr_frame *parent_if = &parent->tf;
+  struct intr_frame *parent_if = &parent->bf;
   bool succ = true;
 
   /* 1. Read the cpu context to local stack. */
@@ -159,14 +200,29 @@ static void __do_fork(void *aux) {
    *       from the fork() until this function successfully duplicates
    *       the resources of parent.
    */
+  if (parent->fd_idx == FDCOUNT_LIMIT)
+    goto error;
 
+  for (int i = 2; i < FDCOUNT_LIMIT; i++) {
+    if (parent->fd_table[i] != NULL) {
+      current->fd_table[i] = file_duplicate(parent->fd_table[i]);
+    } else {
+      current->fd_table[i] = NULL;
+    }
+  }
+  current->fd_idx = parent->fd_idx;
+  if_.R.rax = 0;
   process_init();
 
   /* Finally, switch to the newly created process. */
+  // TODO - sema_up(parent.fork_sema)
+  sema_up(&current->fork_sema);
   if (succ)
     do_iret(&if_);
 error:
-  thread_exit();
+  current->exit_status = -1;
+  sema_up(&current->fork_sema);
+  exit(-1);
 }
 
 /* Switch the current execution context to the f_name.
@@ -225,35 +281,96 @@ int process_exec(void *f_name) {
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
 int process_wait(tid_t child_tid UNUSED) {
-  thread_sleep(150);
+  // thread_sleep(150);
+  // TODO - child_list를 순회. pid 없으면 -1 리턴, 있다면 exited 여부 &
+  // exit_status 검사
+  struct thread *curr = thread_current();
+  struct thread *child_th;
+  struct list *c_list = &curr->child_list;
+  struct list_elem *e;
+  struct child_info *ch_info;
+  bool is_child = false;  // 내 자식이 맞는가
+
+  if (!list_empty(&c_list)) {  // 자식이 존재한다면
+    for (e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
+      ch_info = list_entry(e, struct child_info, c_elem);  // 자식의 유서
+      if (child_tid == ch_info->pid) {  // 기다리려는 자식이 맞다면
+        child_th = ch_info->th;  // 자식의 thread
+        is_child = true;  // 내 자식이 맞다!
+        break;
+      }
+    }
+  }
+  if (is_child) {  // 기다리려는 자식이 내 자식이 맞는 경우
+    bool exited = ch_info->exited;
+    if (exited == 0) {  // 자식이 아직 살아있다면
+      sema_down(&child_th->wait_sema);  // 자식이 죽을 때까지 기다림
+    }
+
+    int child_status = ch_info->exit_status;  // 자식의 사망 원인 조사
+    list_remove(e);  // 호적에서 제거
+    free(ch_info);  // 주민등록 말소 (사망신고 처리)
+    return child_status;
+  } else {  // 기다리려는 자식이 내 자식이 아닌 경우
+    return -1;
+  }
+
   /* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
    * XXX:       to add infinite loop here before
    * XXX:       implementing the process_wait. */
+
   /**
+   * cases:
+   * - 자식이 살아있는 경우) sema_down until child process die with `exit`
+   * - 자식이 살아있었는데 비정상적으로 종료된 경우) 자식이 sema_up을 해주고
+   * 죽어야 함.
+   * - 자식이 이미 죽은 경우) exited이 true라서 바로 exit_status를 리턴.
+   *
    * TODO child가 exit할 때 sema_up을 호출하여 깨어나도록 본인 스레드의
-   * semaphore를 낮춘다.
+   * semaphore를 낮춘다. 이때 semaphore의 값을 0으로 바꿔주어야 한다.
    */
   // sema_down(&thread_current()->wait_sema);
-  return -1;
+}
+
+static struct child_info * e_to_child_info(struct list_elem *e) {
+  return list_entry(e, struct child_info, c_elem);
 }
 
 /* Exit the process. This function is called by thread_exit (). */
 void process_exit(void) {
-  struct thread *curr = thread_current();
+  struct thread *t = thread_current();
   /* TODO: Your code goes here.
    * TODO: Implement process termination message (see
    * TODO: project2/process_termination.html).
-   * TODO: We recommend you to implement process resource cleanup here. 
-	 * */
-  // sema_up(&curr->parent->wait_sema);
-  // sema_up(&curr->parent->exit_sema);
-  // sema_up(&curr->parent->fork_sema);
-  
-  // TODO - file 해제
-  
-  // TODO - free page
-  
-  // TODO - 부모 프로세스에게 exit status를 전달
+   * TODO: We recommend you to implement process resource cleanup here.
+   */
+  // file 해제
+  for (int i = 2; i < t->fd_idx; i++) {
+    if (t->fd_table[i] != NULL) {
+      close(i);
+    }
+  }
+  palloc_free_multiple(t->fd_table, FDT_PAGES);
+
+  // 부모의 child_list 원소를 수정. { exit_status, exited }
+  if (t->parent != NULL) {
+    struct list *c_list = &t->parent->child_list;
+    for (struct list_elem *e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
+      struct child_info *my_info = list_entry(e, struct child_info, c_elem);
+      if (t->tid == my_info->pid) {
+        my_info->exit_status = t->exit_status;
+        my_info->exited = 1;
+        break;
+      }
+    }
+  }
+
+  while (!list_empty(&t->child_list)) {
+    struct child_info *ch_info = list_entry(list_pop_front(&t->child_list), struct child_info, c_elem);
+    free(ch_info);
+  }
+  // 모든 semaphore up
+  sema_up(&t->wait_sema);
 
   process_cleanup();
 }
