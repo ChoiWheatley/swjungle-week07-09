@@ -91,7 +91,7 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED) {
   // 방금 추가된 child_info를 tid로 찾는다.
   // 찾은 tid로 방금 생성된 thread를 찾는다.
   // 방금 생성된 thread의 fork_sema를 sema_down한다.
-  for (e = list_begin(&c_list); e != list_end(&c_list); e = list_next(e)) {
+  for (e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
     ch_info = list_entry(e, struct child_info, c_elem);  // 자식의 유서
     if (tid == ch_info->pid) {  // 기다리려는 자식이 맞다면
       child_th = ch_info->th;  // 자식의 thread// 내 자식이 맞다!
@@ -192,7 +192,6 @@ static void __do_fork(void *aux) {
   // TODO - 페이지 테이블 복제
   if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
     goto error;
-  printf("dfkljsdlfkja");
 #endif
 
   /* TODO: File Descriptor Table 복제
@@ -287,13 +286,13 @@ int process_wait(tid_t child_tid UNUSED) {
   // exit_status 검사
   struct thread *curr = thread_current();
   struct thread *child_th;
-  struct list c_list = curr->child_list;
+  struct list *c_list = &curr->child_list;
   struct list_elem *e;
   struct child_info *ch_info;
   bool is_child = false;  // 내 자식이 맞는가
 
   if (!list_empty(&c_list)) {  // 자식이 존재한다면
-    for (e = list_begin(&c_list); e != list_end(&c_list); e = list_next(e)) {
+    for (e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
       ch_info = list_entry(e, struct child_info, c_elem);  // 자식의 유서
       if (child_tid == ch_info->pid) {  // 기다리려는 자식이 맞다면
         child_th = ch_info->th;  // 자식의 thread
@@ -333,6 +332,10 @@ int process_wait(tid_t child_tid UNUSED) {
   // sema_down(&thread_current()->wait_sema);
 }
 
+static struct child_info * e_to_child_info(struct list_elem *e) {
+  return list_entry(e, struct child_info, c_elem);
+}
+
 /* Exit the process. This function is called by thread_exit (). */
 void process_exit(void) {
   struct thread *t = thread_current();
@@ -355,7 +358,7 @@ void process_exit(void) {
     for (struct list_elem *e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
       struct child_info *my_info = list_entry(e, struct child_info, c_elem);
       if (t->tid == my_info->pid) {
-        my_info->exit_status = t->status;
+        my_info->exit_status = t->exit_status;
         my_info->exited = 1;
         break;
       }
