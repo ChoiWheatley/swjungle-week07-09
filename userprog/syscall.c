@@ -176,7 +176,11 @@ int exec(const char *file) {
   }
   memcpy((void *)page, file, strlen(file) + 1);
 
-  return process_exec((void *)page);
+  int success = process_exec((void *)page);
+  // free page if unsuccesful
+  palloc_free_page(page);
+
+  return success;
 }
 
 int wait(pid_t pid) { 
