@@ -255,16 +255,11 @@ int process_exec(void *f_name) {
 
   /* 이후에 바이너리 파일 로드 */
   success = load(argv[0], &_if);
+  if (!success)
+    return -1;
 
   /* 유저스택에 인자 추가 */
   argument_stack(argc, argv, &_if);
-
-  // hex_dump(_if.rsp, (void *)_if.rsp, USER_STACK - _if.rsp, true);
-
-  /* 로드 실패 시 종료 */
-  palloc_free_page(argv[0]);
-  if (!success)
-    return -1;
 
   /* 프로세스 전환하여 실행 */
   do_iret(&_if);
