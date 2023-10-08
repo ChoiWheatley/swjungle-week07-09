@@ -117,12 +117,13 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux) {
 
   /* 1. TODO: If the parent_page is kernel page, then return immediately. */
   if (is_kernel_vaddr(va)) {
-    return false;
+    return true;
   }
 
   /* 2. Resolve VA from the parent's page map level 4. */
   parent_page = pml4_get_page(parent->pml4, va);
   if (parent_page == NULL) {
+    printf("[fork-duplicate] failed to fetch page for user vaddr 'va'\n");
     return false;
   }
 
@@ -130,8 +131,9 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux) {
    *    TODO: NEWPAGE.
    * 유저 페이지 할당
    */
-  newpage = palloc_get_page(PAL_ZERO | PAL_USER);
+  newpage = palloc_get_page(PAL_USER | PAL_ZERO);
   if (newpage == NULL) {
+    printf("[fork-duplicate] failed to palloc new page\n");
     return false;
   }
 
@@ -150,6 +152,7 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux) {
     /* 6. TODO: if fail to insert page, do error handling.
      * 에러 핸들링
      */
+    printf("Failed to map user virtual page to given physical frame\n");
     return false;
   }
   return true;
@@ -169,7 +172,7 @@ static void __do_fork(void *aux) {
   struct intr_frame if_;
   struct thread *parent = (struct thread *)aux; // `thread_current()` of parent
   struct thread *current = thread_current();
-  struct intr_frame *parent_if = &parent->tf;
+  struct intr_frame *parent_if = &parent->bf;
   bool succ = true;
 
   /* 1. Read the cpu context to local stack. */
@@ -189,6 +192,7 @@ static void __do_fork(void *aux) {
   // TODO - 페이지 테이블 복제
   if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
     goto error;
+  printf("dfkljsdlfkja");
 #endif
 
   /* TODO: File Descriptor Table 복제
@@ -348,7 +352,7 @@ void process_exit(void) {
   // 부모의 child_list 원소를 수정. { exit_status, exited }
   if (t->parent != NULL) {
     struct list *c_list = &t->parent->child_list;
-    for (struct list_elem *e = list_begin(&c_list); e != list_end(&c_list); e = list_next(e)) {
+    for (struct list_elem *e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
       struct child_info *my_info = list_entry(e, struct child_info, c_elem);
       if (t->tid == my_info->pid) {
         my_info->exit_status = t->status;

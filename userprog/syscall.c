@@ -98,6 +98,7 @@ void syscall_handler(struct intr_frame *f UNUSED) {
       exit(f->R.rdi);
       break;
     case SYS_FORK:
+      thread_current()->bf = *f;
       f->R.rax = fork(f->R.rdi);
       break;
     case SYS_EXEC:
@@ -164,7 +165,6 @@ pid_t fork(const char *thread_name) {
 }
 
 int exec(const char *file) {
-  check_address(file);
   return 0;
 }
 

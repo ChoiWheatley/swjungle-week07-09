@@ -210,7 +210,7 @@ thread_print_stats (void) {
 tid_t
 thread_create (const char *name, int priority,
     thread_func *function, void *aux) {
-  struct thread *t;
+  struct thread *t, *cur = thread_current();
   tid_t tid;
 
   ASSERT (function != NULL);
@@ -249,7 +249,7 @@ thread_create (const char *name, int priority,
   t->fd_table[0] = 1;   // stdin 자리 : 1 배정
   t->fd_table[1] = 2;   // stdout 자리 : 2 배정
   t->parent = thread_current();
-  list_push_front(&t->parent->child_list, &ch_info->c_elem);
+  list_push_front(&cur->child_list, &ch_info->c_elem);
 #endif  /* USERPROG */
 
   /* Add to run queue. */
@@ -456,7 +456,9 @@ idle (void *idle_started_ UNUSED) {
     g_ready_threads -= 1;
     list_remove(&idle_thread->d_elem);
   }
+#ifdef USERPROG
 
+#endif // USERPROG
   sema_up (idle_started);
 
   for (;;) {
