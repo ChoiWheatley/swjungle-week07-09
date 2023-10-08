@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <syscall-nr.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "intrinsic.h"
 #include "threads/flags.h"
@@ -13,7 +14,9 @@
 #include "threads/thread.h"
 #include "threads/init.h"
 #include "threads/synch.h"
+#include "threads/palloc.h"
 #include "userprog/gdt.h"
+#include "userprog/process.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 
@@ -165,7 +168,15 @@ pid_t fork(const char *thread_name) {
 }
 
 int exec(const char *file) {
-  return 0;
+  check_address(file);
+
+  uint8_t *page;
+  if((page = palloc_get_page(PAL_USER)) == NULL) {
+    return -1;
+  }
+  memcpy((void *)page, file, strlen(file) + 1);
+
+  return process_exec((void *)page);
 }
 
 int wait(pid_t pid) { 
