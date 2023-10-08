@@ -7,35 +7,15 @@
 #include <stdbool.h>
 
 #include "intrinsic.h"
-#include "threads/synch.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/loader.h"
 #include "threads/thread.h"
 #include "threads/init.h"
+#include "threads/synch.h"
 #include "userprog/gdt.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
-
-void syscall_entry(void);
-void syscall_handler(struct intr_frame *);
-void exit(int status);
-bool create(const char *file, unsigned initial_size);
-bool remove(const char *file);
-int open(const char *file);
-int filesize(int fd);
-int read(int fd, void *buffer, unsigned size);
-int write(int fd, const void *buffer, unsigned size);
-void seek(int fd, unsigned position);
-unsigned tell(int fd);
-void close(int fd);
-void halt(void);
-void exit(int status);
-pid_t fork(const char *thread_name);
-int exec(const char *file);
-int wait(pid_t pid);
-int dup2(int oldfd, int newfd);
-
 
 /* System call.
  *
@@ -51,6 +31,9 @@ int dup2(int oldfd, int newfd);
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
 
 struct lock filesys_lock;
+void check_address(const void*);
+void syscall_entry(void);
+void syscall_handler(struct intr_frame *);
 
 void halt(void);
 void exit(int status);
@@ -72,6 +55,23 @@ void close(int fd);
 void delete_file_from_fd_table(int fd);
 
 int dup2(int oldfd, int newfd);
+
+/**
+ * @brief 사용자 주소가 유효한지 여부를 판단한다. 두 가지 검사를 수행한다.
+ * 1. 주소값이 KERN_BASE보다 크다면 커널주소를 참조하려고 하기 때문에 page
+ * fault를 발생시켜 프로세스를 종료시켜야 한다.
+ * 2. 할당이 안된 영역을 참조하려고 한다면 segfault를 발생시켜 프로세스를
+ * 종료시켜야 한다.
+ *
+ * @param uaddr 유저 프로그램이 syscall을 통해 요청한 주소
+ * @return 주소가 유효한지 여부
+ * @note 해당 함수는 유저 프로그램을 종료시켜줍니다.
+ */
+void check_address(const void *uaddr) {
+  if (is_kernel_vaddr(uaddr) || pml4_get_page(thread_current()->pml4, uaddr) == NULL) {
+		exit(-1);
+  } 
+}
 
 void syscall_init(void) {
   write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48 | ((uint64_t)SEL_KCSEG)
@@ -160,16 +160,17 @@ void exit(int status) {
  */
 pid_t fork(const char *thread_name) {
   check_address(thread_name);
-  // TODO - do wait until child process done fork 
-  // sema_down(cur.fork_sema)
   return process_fork(thread_name, NULL);
 }
 
 int exec(const char *file) {
+  check_address(file);
   return 0;
 }
 
-int wait(pid_t pid) { return process_wait(pid); }
+int wait(pid_t pid) { 
+  return process_wait(pid); 
+}
 //! SECTION - Process based System Call
 // SECTION - File based System Call
 bool create(const char *file, unsigned initial_size) {

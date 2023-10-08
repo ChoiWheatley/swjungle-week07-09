@@ -236,6 +236,11 @@ thread_create (const char *name, int priority,
   t->tf.eflags = FLAG_IF;
 
 #ifdef USERPROG
+  struct child_info *ch_info = (struct child_info *) malloc(sizeof(struct child_info));
+  ch_info->pid = tid;
+  ch_info->th = t;
+  ch_info->exited = false;
+
   t->fd_table = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
   if (t->fd_table == NULL) {
     return TID_ERROR;
@@ -243,6 +248,8 @@ thread_create (const char *name, int priority,
   t->fd_idx = 2;
   t->fd_table[0] = 1;   // stdin 자리 : 1 배정
   t->fd_table[1] = 2;   // stdout 자리 : 2 배정
+  t->parent = thread_current();
+  list_push_front(&t->parent->child_list, &ch_info->c_elem);
 #endif  /* USERPROG */
 
   /* Add to run queue. */
@@ -515,9 +522,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 
 #ifdef USERPROG
   t->exit_status = 0;
+  list_init(&t->child_list);
   sema_init(&t->wait_sema, 0);
   sema_init(&t->fork_sema, 0);
-  sema_init(&t->exit_sema, 0);
 #endif
 }
 
