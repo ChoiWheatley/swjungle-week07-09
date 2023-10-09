@@ -37,8 +37,8 @@ cd build
 # pintos --fs-disk filesys.dsk -p tests/userprog/args-single:args-single -- -q -f run 'args-single onearg'
 # pintos --fs-disk filesys.dsk -p tests/userprog/args-single:args-single -- -f run 'args-single onearg'
 # pintos --fs-disk filesys.dsk -p tests/userprog/fork-once:fork-once --gdb -- -f run 'fork-once'
-# pintos --fs-disk -p tests/userprog/read-normal:read-normal -p ../../tests/userprog/sample.txt:sample.txt -- -q -f run read-normal
+pintos --fs-disk=10 -p tests/userprog/read-normal:read-normal -p ../../tests/userprog/sample.txt:sample.txt -- -q -f run read-normal
 # pintos --fs-disk=10 -p tests/userprog/close-normal:close-normal -p ../../tests/userprog/sample.txt:sample.txt --gdb -- -q -f  run 'close-normal'
 # pintos --gdb -v -k --fs-disk=10 -p tests/userprog/exec-once:exec-once -p tests/userprog/child-simple:child-simple -- -q   -f run exec-once
 # pintos --gdb -v -k --fs-disk=10 -p tests/userprog/exec-missing:exec-missing -- -q   -f run exec-missing
-pintos --gdb -v -k --fs-disk=10 -p tests/userprog/rox-child:rox-child -p tests/userprog/child-rox:child-rox -- -q -f run rox-child
+# pintos --gdb -v -k --fs-disk=10 -p tests/userprog/read-zero:read-zero -p ../../tests/userprog/sample-text:sample-text -- -q -f run read-zero
