@@ -617,15 +617,13 @@ done:
 
 struct child_info *tid_to_child_info(tid_t child_tid) {
   struct thread *t = thread_current();
-  struct list c_list = t->child_list;
+  struct list *c_list = &t->child_list;
   struct list_elem *e;
   struct child_info *ch_info;
-  if (!list_empty(&c_list)) {
-    for (e = list_begin(&c_list); e != list_end(&c_list); e = list_next(e)) {
-      ch_info = list_entry(e, struct child_info, c_elem);  // 자식의 유서
-      if (ch_info->pid == child_tid) {  // 기다리려는 자식이 맞다면 자식의 thread// 내 자식이 맞다!
-        return ch_info;
-      }
+  for (e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
+    ch_info = list_entry(e, struct child_info, c_elem);  // 자식의 유서
+    if (ch_info->pid == child_tid) {  // 기다리려는 자식이 맞다면 자식의 thread// 내 자식이 맞다!
+      return ch_info;
     }
   }
   return NULL;
