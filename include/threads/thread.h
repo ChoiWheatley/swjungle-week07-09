@@ -183,8 +183,8 @@ void thread_wakeup(); // sleep_list에서 자기 차례가 되면 ready_list로
                       // unblock해서 list_push_back 함수
 void update_priority();
 
-struct thread *get_thread_elem(const struct list_elem *elem);
-struct thread *get_thread_d_elem(const struct list_elem *elem);
+struct thread *elem_to_thread(const struct list_elem *elem);
+struct thread *d_elem_to_thread(const struct list_elem *elem);
 
 int get_priority(struct thread *target);
 int get_nice(struct thread *target);

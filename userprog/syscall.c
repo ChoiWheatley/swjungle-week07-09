@@ -19,6 +19,7 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "filesys/inode.h"
+#include "devices/input.h"
 
 /* System call.
  *
@@ -103,28 +104,28 @@ void syscall_handler(struct intr_frame *f UNUSED) {
       f->R.rax = fork((void *)f->R.rdi);
       break;
     case SYS_EXEC:
-      exec(f->R.rdi);
+      exec((void *)f->R.rdi);
       break;
     case SYS_WAIT:
       f->R.rax = wait(f->R.rdi);
       break;
     case SYS_CREATE:
-      f->R.rax = create(f->R.rdi, f->R.rsi);
+      f->R.rax = create((void *)f->R.rdi, f->R.rsi);
       break;
     case SYS_REMOVE:
-      f->R.rax = remove(f->R.rdi);
+      f->R.rax = remove((void *)f->R.rdi);
       break;
     case SYS_OPEN:
-      f->R.rax = open(f->R.rdi);
+      f->R.rax = open((void *)f->R.rdi);
       break;
     case SYS_FILESIZE:
       f->R.rax = filesize(f->R.rdi);
       break;
     case SYS_READ:
-      f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
+      f->R.rax = read(f->R.rdi, (void *)f->R.rsi, f->R.rdx);
       break;
     case SYS_WRITE:
-      f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
+      f->R.rax = write(f->R.rdi, (void *)f->R.rsi, f->R.rdx);
       break;
     case SYS_SEEK:
       seek(f->R.rdi, f->R.rsi);
