@@ -218,16 +218,29 @@ int open(const char *file) {
 int add_file_to_fd_table(struct file *file) {
 	struct thread *t = thread_current();
 	struct file **fdt = t->fd_table;
-	
-	while (fdt[t->fd_idx] != NULL && t->fd_idx < FDCOUNT_LIMIT) {
-		t->fd_idx++;
-	}
+	int i;
+	// while (fdt[t->fd_idx] != NULL && t->fd_idx < FDCOUNT_LIMIT) {
+	// 	t->fd_idx++;
+	// }
 
-	if (t->fd_idx >= FDCOUNT_LIMIT) {
-		return -1;
-	}
-	fdt[t->fd_idx] = file;
-	return t->fd_idx;
+	// if (t->fd_idx >= FDCOUNT_LIMIT) {
+	// 	return -1;
+	// }
+	// fdt[t->fd_idx] = file;
+	// return t->fd_idx;
+  int fd = -1;
+  for (i = 2; i < FDCOUNT_LIMIT; i++) {
+    if (fdt[i] == NULL) {
+      fdt[i] = file;
+      fd = i;
+      if (i > t->fd_idx)
+        t->fd_idx = i;
+      break;
+    }
+  }
+  if (i == FDCOUNT_LIMIT)
+    t->fd_idx = FDCOUNT_LIMIT;
+  return fd;
 }
 
 int filesize(int fd) {
