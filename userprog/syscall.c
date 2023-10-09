@@ -18,6 +18,7 @@
 #include "userprog/process.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "filesys/inode.h"
 
 /* System call.
  *
@@ -32,7 +33,6 @@
 #define MSR_LSTAR 0xc0000082        /* Long mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
 
-struct lock filesys_lock;
 
 void check_address(const void*);
 void syscall_entry(void);
@@ -86,8 +86,6 @@ void syscall_init(void) {
    * mode stack. Therefore, we masked the FLAG_FL. */
   write_msr(MSR_SYSCALL_MASK,
             FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
-
-  lock_init(&filesys_lock);
 }
 
 /* The main system call interface */
@@ -267,13 +265,15 @@ int read(int fd, void *buffer, unsigned size) {
   } else if (fd == STDOUT_FILENO) {  // STDOUT일 때
     return -1;
   } else {
-    struct file *file = fd_to_file(fd);  // fd에 해당하는 file
-    if (file == NULL) { // 파일을 읽을 수 없는 경우
+    struct file *filep = fd_to_file(fd);  // fd에 해당하는 file
+    if (filep == NULL) { // 파일을 읽을 수 없는 경우
       return -1;
     }
-    lock_acquire(&filesys_lock);
-    read_count = file_read(file, buffer, size);
-    lock_release(&filesys_lock);
+
+    // exclusive read & write
+    lock_acquire(inode_get_lock(file_get_inode(filep))); 
+    read_count = file_read(filep, buffer, size);
+    lock_release(inode_get_lock(file_get_inode(filep)));
   }
 
   return read_count;
@@ -289,13 +289,15 @@ int write(int fd, const void *buffer, unsigned size) {
   } else if (fd == STDIN_FILENO) {
     return 0;
   } else {
-    struct file *file = fd_to_file(fd);
-    if (file == NULL) {
+    struct file *filep = fd_to_file(fd);
+    if (filep == NULL) {
       return 0;
     }
-    lock_acquire(&filesys_lock);
-    read_count = file_write(file, buffer, size);
-    lock_release(&filesys_lock);
+
+    // exclusive read & write
+    lock_acquire(inode_get_lock(file_get_inode(filep)));
+    read_count = file_write(filep, buffer, size);
+    lock_release(inode_get_lock(file_get_inode(filep)));
   }
   return read_count;
 }

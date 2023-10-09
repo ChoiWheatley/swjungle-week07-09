@@ -6,6 +6,7 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
+#include "threads/synch.h"
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -34,6 +35,7 @@ struct inode {
 	bool removed;                       /* True if deleted, false otherwise. */
 	int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
 	struct inode_disk data;             /* Inode content. */
+	struct lock filesys_lock;						/* 배타적인 read & write를 지원하는 lock */
 };
 
 /* Returns the disk sector that contains byte offset POS within
@@ -125,6 +127,7 @@ inode_open (disk_sector_t sector) {
 	inode->open_cnt = 1;
 	inode->deny_write_cnt = 0;
 	inode->removed = false;
+	lock_init(&inode->filesys_lock);
 	disk_read (filesys_disk, inode->sector, &inode->data);
 	return inode;
 }
@@ -307,7 +310,8 @@ inode_allow_write (struct inode *inode) {
 }
 
 /* Returns the length, in bytes, of INODE's data. */
-off_t
-inode_length (const struct inode *inode) {
-	return inode->data.length;
+off_t inode_length(const struct inode *inode) { return inode->data.length; }
+
+struct lock *inode_get_lock(struct inode *ino) {
+	return &ino->filesys_lock;
 }
