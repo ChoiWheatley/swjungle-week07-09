@@ -31,6 +31,8 @@ static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
 static void __do_fork(void *);
 
+struct child_info *tid_to_child_info(tid_t);
+
 /* General process initializer for initd and other process. */
 static void process_init(void) { struct thread *current = thread_current(); }
 
@@ -91,14 +93,18 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED) {
   // 방금 추가된 child_info를 tid로 찾는다.
   // 찾은 tid로 방금 생성된 thread를 찾는다.
   // 방금 생성된 thread의 fork_sema를 sema_down한다.
-  for (e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
-    ch_info = list_entry(e, struct child_info, c_elem);  // 자식의 유서
-    if (tid == ch_info->pid) {  // 기다리려는 자식이 맞다면
-      child_th = ch_info->th;  // 자식의 thread// 내 자식이 맞다!
-      sema_down(&child_th->fork_sema);
-      break;
-    }
-  }
+  // for (e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
+  //   ch_info = list_entry(e, struct child_info, c_elem);  // 자식의 유서
+  //   if (tid == ch_info->pid) {  // 기다리려는 자식이 맞다면
+  //     child_th = ch_info->th;  // 자식의 thread// 내 자식이 맞다!
+  //     sema_down(&child_th->fork_sema);
+  //     break;
+  //   }
+  // }
+  ch_info = tid_to_child_info(tid);
+  child_th = ch_info->th;
+  sema_down(&child_th->fork_sema);
+
   if (child_th->exit_status == -1) {  // 자식이 fork가 제대로 되지 않고 종료된 경우
     return TID_ERROR;
   }
@@ -277,32 +283,45 @@ int process_exec(void *f_name) {
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
 int process_wait(tid_t child_tid UNUSED) {
-  struct thread *curr = thread_current();
-  struct thread *child_th;
-  struct list *c_list = &curr->child_list;  // 호적
-  struct list_elem *e;
+  // struct thread *curr = thread_current();
+  // struct thread *child_th;
+  // struct list *c_list = &curr->child_list;  // 호적
+  // struct list_elem *e;
   struct child_info *ch_info;
-  bool is_child = false;  // 받은 주민번호가 내 자식의 것이 맞는가
+  // bool is_child = false;  // 받은 주민번호가 내 자식의 것이 맞는가
 
   /* 호적을 순회하며 내 자식의 주민번호인지 확인 */
-  if (!list_empty(c_list)) {  // 자식이 존재한다면
-    for (e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
-      ch_info = list_entry(e, struct child_info, c_elem);  // 자식의 유서
-      if (child_tid == ch_info->pid) {  // 기다리려는 자식이 맞다면
-        child_th = ch_info->th;  // 자식의 thread
-        is_child = true;  // 내 자식이 맞다!
-        break;
-      }
-    }
-  }
-  if (is_child) {  // 기다리려는 자식이 내 자식이 맞는 경우
-    bool exited = ch_info->exited;
-    if (exited == 0) {  // 자식이 아직 살아있다면
-      sema_down(&child_th->wait_sema);  // 자식이 죽을 때까지 기다림
-    }
+  // if (!list_empty(c_list)) {  // 자식이 존재한다면
+  //   for (e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
+  //     ch_info = list_entry(e, struct child_info, c_elem);  // 자식의 유서
+  //     if (child_tid == ch_info->pid) {  // 기다리려는 자식이 맞다면
+  //       child_th = ch_info->th;  // 자식의 thread
+  //       is_child = true;  // 내 자식이 맞다!
+  //       break;
+  //     }
+  //   }
+  // }
+  // if (is_child) {  // 기다리려는 자식이 내 자식이 맞는 경우
+  //   bool exited = ch_info->exited;
+  //   if (exited == 0) {  // 자식이 아직 살아있다면
+  //     sema_down(&child_th->wait_sema);  // 자식이 죽을 때까지 기다림
+  //   }
 
+  //   int child_status = ch_info->exit_status;  // 자식의 사망 원인 조사
+  //   list_remove(e);  // 호적에서 제거
+  //   free(ch_info);  // 주민등록 말소 (사망신고 처리)
+  //   return child_status;
+  // } else {  // 기다리려는 자식이 내 자식이 아닌 경우
+  //   return -1;
+  // }
+  
+  if ((ch_info = tid_to_child_info(child_tid)) != NULL) {
+    bool exited = ch_info->exited;
+    if (exited == 0) {
+      sema_down(&ch_info->th->wait_sema);
+    }
     int child_status = ch_info->exit_status;  // 자식의 사망 원인 조사
-    list_remove(e);  // 호적에서 제거
+    list_remove(&ch_info->c_elem);  // 호적에서 제거
     free(ch_info);  // 주민등록 말소 (사망신고 처리)
     return child_status;
   } else {  // 기다리려는 자식이 내 자식이 아닌 경우
@@ -594,6 +613,22 @@ done:
   /* We arrive here whether the load is successful or not. */
   // file_close(file); load에서 file을 닫으면 lock이 풀린다.
   return success;
+}
+
+struct child_info *tid_to_child_info(tid_t child_tid) {
+  struct thread *t = thread_current();
+  struct list c_list = t->child_list;
+  struct list_elem *e;
+  struct child_info *ch_info;
+  if (!list_empty(&c_list)) {
+    for (e = list_begin(&c_list); e != list_end(&c_list); e = list_next(e)) {
+      ch_info = list_entry(e, struct child_info, c_elem);  // 자식의 유서
+      if (ch_info->pid == child_tid) {  // 기다리려는 자식이 맞다면 자식의 thread// 내 자식이 맞다!
+        return ch_info;
+      }
+    }
+  }
+  return NULL;
 }
 
 /* Checks whether PHDR describes a valid, loadable segment in
