@@ -30,6 +30,7 @@ static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
 static void __do_fork(void *);
+struct lock load_lock;
 
 /* General process initializer for initd and other process. */
 static void process_init(void) { struct thread *current = thread_current(); }
@@ -66,6 +67,7 @@ static void initd(void *f_name) {
 #endif
 
   process_init();
+  lock_init(&load_lock);
 
   if (process_exec(f_name) < 0)
     PANIC("Fail to launch initd\n");
@@ -123,7 +125,6 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux) {
   /* 2. Resolve VA from the parent's page map level 4. */
   parent_page = pml4_get_page(parent->pml4, va);
   if (parent_page == NULL) {
-    printf("[fork-duplicate] failed to fetch page for user vaddr 'va'\n");
     return false;
   }
 
@@ -133,7 +134,6 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux) {
    */
   newpage = palloc_get_page(PAL_USER | PAL_ZERO);
   if (newpage == NULL) {
-    printf("[fork-duplicate] failed to palloc new page\n");
     return false;
   }
 
@@ -152,7 +152,6 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux) {
     /* 6. TODO: if fail to insert page, do error handling.
      * 에러 핸들링
      */
-    printf("Failed to map user virtual page to given physical frame\n");
     return false;
   }
   return true;
@@ -286,7 +285,7 @@ int process_wait(tid_t child_tid UNUSED) {
   struct child_info *ch_info;
   bool is_child = false;  // 내 자식이 맞는가
 
-  if (!list_empty(&c_list)) {  // 자식이 존재한다면
+  if (!list_empty(c_list)) {  // 자식이 존재한다면
     for (e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
       ch_info = list_entry(e, struct child_info, c_elem);  // 자식의 유서
       if (child_tid == ch_info->pid) {  // 기다리려는 자식이 맞다면
@@ -517,12 +516,20 @@ static bool load(const char *file_name, struct intr_frame *if_) {
     goto done;
   process_activate(thread_current());
 
+  if (t->running != NULL) {
+    file_allow_write(t->running);
+    t->running = NULL;
+  }
+
   /* Open executable file. */
   file = filesys_open(file_name);
   if (file == NULL) {
     printf("load: %s: open failed\n", file_name);
     goto done;
   }
+
+  t->running = file;
+  file_deny_write(file); // 실행 중인 파일은 수정할 수 없다.
 
   /* Read and verify executable header. */
   if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr ||
@@ -600,7 +607,7 @@ static bool load(const char *file_name, struct intr_frame *if_) {
 
 done:
   /* We arrive here whether the load is successful or not. */
-  file_close(file);
+  // file_close(file); load에서 file을 닫으면 lock이 풀린다.
   return success;
 }
 

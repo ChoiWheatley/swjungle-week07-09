@@ -13,7 +13,6 @@
 #include "threads/loader.h"
 #include "threads/thread.h"
 #include "threads/init.h"
-#include "threads/synch.h"
 #include "threads/palloc.h"
 #include "userprog/gdt.h"
 #include "userprog/process.h"
@@ -34,6 +33,7 @@
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
 
 struct lock filesys_lock;
+
 void check_address(const void*);
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -200,9 +200,13 @@ bool remove(const char *file) {
 
 int open(const char *file) {
   check_address(file);
+  struct thread *t = thread_current();
   struct file *file_obj = filesys_open(file);
   if (file_obj == NULL) {
     return -1;
+  }
+  if (!strcmp(t->name, file)) {
+    file_deny_write(file_obj);
   }
   int fd = add_file_to_fd_table(file_obj);
 
@@ -215,18 +219,16 @@ int open(const char *file) {
 int add_file_to_fd_table(struct file *file) {
 	struct thread *t = thread_current();
 	struct file **fdt = t->fd_table;
-	int fd = t->fd_idx; //fd값은 2부터 출발
 	
-	while (fdt[fd] != NULL && fd < FDCOUNT_LIMIT) {
-		fd++;
+	while (fdt[t->fd_idx] != NULL && t->fd_idx < FDCOUNT_LIMIT) {
+		t->fd_idx++;
 	}
 
-	if (fd >= FDCOUNT_LIMIT) {
+	if (t->fd_idx >= FDCOUNT_LIMIT) {
 		return -1;
 	}
-	t->fd_idx = fd;
-	fdt[fd] = file;
-	return fd;
+	fdt[t->fd_idx] = file;
+	return t->fd_idx;
 }
 
 int filesize(int fd) {
@@ -286,11 +288,11 @@ int write(int fd, const void *buffer, unsigned size) {
     putbuf(buffer, size);
     read_count = size;
   } else if (fd == STDIN_FILENO) {
-    return -1;
+    return 0;
   } else {
     struct file *file = fd_to_file(fd);
     if (file == NULL) {
-      return -1;
+      return 0;
     }
     lock_acquire(&filesys_lock);
     read_count = file_write(file, buffer, size);
