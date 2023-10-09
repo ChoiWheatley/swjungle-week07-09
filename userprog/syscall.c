@@ -178,7 +178,6 @@ int exec(const char *file) {
 
   int success = process_exec((void *)page);
   // free page if unsuccesful
-  palloc_free_page(page);
 
   return success;
 }
@@ -205,9 +204,9 @@ int open(const char *file) {
   if (file_obj == NULL) {
     return -1;
   }
-  if (!strcmp(t->name, file)) {
-    file_deny_write(file_obj);
-  }
+  // if (!strcmp(t->name, file)) {
+  //   file_deny_write(file_obj);
+  // }
   int fd = add_file_to_fd_table(file_obj);
 
   if (fd == -1) {
@@ -306,7 +305,7 @@ void seek(int fd, unsigned position) {
     return;
   }
   struct file *file = fd_to_file(fd);
-  check_address(file);
+  // check_address(file);
   if (file == NULL) {
     return;
   }
@@ -318,7 +317,7 @@ unsigned tell(int fd) {
     return;
   }
   struct file *file = fd_to_file(fd);
-  check_address(file);
+  // check_address(file);
   if (file == NULL) {
     return;
   }

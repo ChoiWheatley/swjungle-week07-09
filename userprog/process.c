@@ -228,6 +228,7 @@ error:
  * Returns -1 on fail. */
 int process_exec(void *f_name) {
   char *file_name = f_name;
+  char *file_copy = f_name;
   bool success;
   int i;
   char *argv[128] = {
@@ -254,12 +255,15 @@ int process_exec(void *f_name) {
 
   /* 이후에 바이너리 파일 로드 */
   success = load(argv[0], &_if);
-  if (!success)
+  if (!success) {
+    palloc_free_page(file_copy);
     return -1;
+  }
 
   /* 유저스택에 인자 추가 */
   argument_stack(argc, argv, &_if);
 
+  palloc_free_page(file_copy);
   /* 프로세스 전환하여 실행 */
   do_iret(&_if);
   NOT_REACHED();
@@ -524,6 +528,7 @@ static bool load(const char *file_name, struct intr_frame *if_) {
   /* Open executable file. */
   file = filesys_open(file_name);
   if (file == NULL) {
+    file_close(file);
     printf("load: %s: open failed\n", file_name);
     goto done;
   }
