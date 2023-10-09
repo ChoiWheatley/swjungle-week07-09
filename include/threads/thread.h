@@ -125,6 +125,7 @@ struct thread {
 
   uint64_t *pml4;         /* Page map level 4 */
   struct file **fd_table; /* file descriptor table */
+  struct file *running;
   struct list child_list;
   struct thread *parent;
   struct semaphore wait_sema;
