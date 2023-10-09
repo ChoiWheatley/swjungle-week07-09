@@ -19,6 +19,7 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "filesys/inode.h"
+#include "devices/input.h"
 
 /* System call.
  *
