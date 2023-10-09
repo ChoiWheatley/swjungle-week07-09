@@ -2,6 +2,7 @@
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/inode.h"
 #include "include/lib/stdio.h"
 #include "intrinsic.h"
 #include "threads/flags.h"
@@ -536,14 +537,17 @@ static bool load(const char *file_name, struct intr_frame *if_) {
   file_deny_write(file); // 실행 중인 파일은 수정할 수 없다.
 
   /* Read and verify executable header. */
+  lock_acquire(inode_get_lock(file_get_inode(file)));
   if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr ||
       memcmp(ehdr.e_ident, "\177ELF\2\1\1", 7) || ehdr.e_type != 2 ||
       ehdr.e_machine != 0x3E // amd64
       || ehdr.e_version != 1 || ehdr.e_phentsize != sizeof(struct Phdr) ||
       ehdr.e_phnum > 1024) {
+    lock_release(inode_get_lock(file_get_inode(file)));
     printf("load: %s: error loading executable\n", file_name);
     goto done;
   }
+  lock_release(inode_get_lock(file_get_inode(file)));
 
   /* Read program headers. */
   file_ofs = ehdr.e_phoff;
@@ -554,8 +558,12 @@ static bool load(const char *file_name, struct intr_frame *if_) {
       goto done;
     file_seek(file, file_ofs);
 
-    if (file_read(file, &phdr, sizeof phdr) != sizeof phdr)
+    lock_acquire(inode_get_lock(file_get_inode(file)));
+    if (file_read(file, &phdr, sizeof phdr) != sizeof phdr) {
+      lock_release(inode_get_lock(file_get_inode(file)));
       goto done;
+    }
+    lock_release(inode_get_lock(file_get_inode(file)));
     file_ofs += sizeof phdr;
     switch (phdr.p_type) {
     case PT_NULL:
