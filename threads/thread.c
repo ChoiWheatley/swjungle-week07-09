@@ -236,10 +236,10 @@ thread_create (const char *name, int priority,
   t->tf.eflags = FLAG_IF;
 
 #ifdef USERPROG
-  struct child_info *ch_info = (struct child_info *) malloc(sizeof(struct child_info));
-  ch_info->pid = tid;
-  ch_info->th = t;
-  ch_info->exited = false;
+  struct child_info *ch_info = (struct child_info *) malloc(sizeof(struct child_info));   // 자식의 유서 새로 할당
+  ch_info->pid = tid;  // 자식의 주민 등록 번호
+  ch_info->th = t;  // 자식 thread의 포인터 등록
+  ch_info->exited = false;  // 자식의 사망 여부
 
   t->fd_table = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
   if (t->fd_table == NULL) {
