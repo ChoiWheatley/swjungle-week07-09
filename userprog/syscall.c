@@ -20,6 +20,7 @@
 #include "filesys/file.h"
 #include "filesys/inode.h"
 #include "devices/input.h"
+#include "kernel/stdio.h"
 
 /* System call.
  *
@@ -367,12 +368,12 @@ void seek(int fd, unsigned position) {
  * @brief 파일 내의 커서 위치를 반환하는 system call
  */
 unsigned tell(int fd) {
+  struct file *file;
   if (fd < 2) {
-    return;
+    return (unsigned)-1;
   }
-  struct file *file = fd_to_file(fd);
-  if (file == NULL) {
-    return;
+  if ((file = fd_to_file(fd)) == NULL) {
+    return (unsigned)-1;
   }
   return file_tell(file);
 }
