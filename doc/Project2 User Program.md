@@ -30,6 +30,7 @@
 ## Control Register
 
 ![control-register](https://t1.daumcdn.net/cfile/tistory/243FB03656234D0220?original)
+
 컨트롤 레지스터란 운영체제의 운영 모드를 변경하고, 현재 운영 중인 모드의 기능을 제어하는 레지스터 입니다. CR0, CR1, CR2, CR3, CR4 총 5개의 컨트롤 레지스터가 존재합니다. (x86-64 프로세서에서는 CR8이 추가) 
 
 - CR3 (Control Register 3)
