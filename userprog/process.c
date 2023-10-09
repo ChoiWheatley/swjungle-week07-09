@@ -349,6 +349,7 @@ void process_exit(void) {
     }
   }
   palloc_free_multiple(t->fd_table, FDT_PAGES);
+  file_close(t->running);
 
   // 부모의 child_list 원소를 수정. { exit_status, exited }
   if (t->parent != NULL) {
@@ -365,6 +366,7 @@ void process_exit(void) {
 
   while (!list_empty(&t->child_list)) {
     struct child_info *ch_info = list_entry(list_pop_front(&t->child_list), struct child_info, c_elem);
+    ch_info->th->parent = NULL;
     free(ch_info);
   }
   // 모든 semaphore up
@@ -521,7 +523,7 @@ static bool load(const char *file_name, struct intr_frame *if_) {
   process_activate(thread_current());
 
   if (t->running != NULL) {
-    file_allow_write(t->running);
+    file_close(t->running);
     t->running = NULL;
   }
 
