@@ -19,6 +19,7 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "filesys/inode.h"
+#include "devices/input.h"
 
 /* System call.
  *
@@ -100,31 +101,31 @@ void syscall_handler(struct intr_frame *f UNUSED) {
       break;
     case SYS_FORK:
       thread_current()->bf = *f;
-      f->R.rax = fork(f->R.rdi);
+      f->R.rax = fork((void *)f->R.rdi);
       break;
     case SYS_EXEC:
-      exec(f->R.rdi);
+      exec((void *)f->R.rdi);
       break;
     case SYS_WAIT:
       f->R.rax = wait(f->R.rdi);
       break;
     case SYS_CREATE:
-      f->R.rax = create(f->R.rdi, f->R.rsi);
+      f->R.rax = create((void *)f->R.rdi, f->R.rsi);
       break;
     case SYS_REMOVE:
-      f->R.rax = remove(f->R.rdi);
+      f->R.rax = remove((void *)f->R.rdi);
       break;
     case SYS_OPEN:
-      f->R.rax = open(f->R.rdi);
+      f->R.rax = open((void *)f->R.rdi);
       break;
     case SYS_FILESIZE:
       f->R.rax = filesize(f->R.rdi);
       break;
     case SYS_READ:
-      f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
+      f->R.rax = read(f->R.rdi, (void *)f->R.rsi, f->R.rdx);
       break;
     case SYS_WRITE:
-      f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
+      f->R.rax = write(f->R.rdi, (void *)f->R.rsi, f->R.rdx);
       break;
     case SYS_SEEK:
       seek(f->R.rdi, f->R.rsi);
@@ -143,10 +144,18 @@ void syscall_handler(struct intr_frame *f UNUSED) {
 
 // SECTION - Project 2 USERPROG SYSTEM CALL
 // SECTION - Process based System Call
+/**
+ * @brief OS 종료
+ */
 void halt(void) { 
   power_off(); 
 }
 
+/**
+ * @brief 현재 실행중인 thread를 종료시킨다.
+ * 
+ * @param status 사망 원인, -1인 경우 사고사
+ */
 void exit(int status) {
   struct thread *t = thread_current();
   t->exit_status = status;
@@ -165,6 +174,11 @@ pid_t fork(const char *thread_name) {
   return process_fork(thread_name, NULL);
 }
 
+/**
+ * @brief 해당 파일을 실행시킨다.
+ * 
+ * @return int 실행 성공(1)/실패(0) 여부를 반환한다.
+ */
 int exec(const char *file) {
   check_address(file);
 
@@ -179,22 +193,36 @@ int exec(const char *file) {
 
   return success;
 }
-
+/**
+ * @brief 받은 주민등록번호에 해당하는 자식의 사망 원인을 조사하여 반환한다.
+ * 
+ * @param pid 자식의 주민등록번호
+ * @return int 자식의 사망 원인 (자식의 exit_status)
+ */
 int wait(pid_t pid) { 
   return process_wait(pid); 
 }
-//! SECTION - Process based System Call
+// !SECTION - Process based System Call
 // SECTION - File based System Call
+/**
+ * @brief 파일을 생성하는 system call, 생성 성공 여부를 bool로 반환한다.
+ */
 bool create(const char *file, unsigned initial_size) {
   check_address(file);
   return filesys_create(file, initial_size);
 }
 
+/**
+ * @brief 파일을 삭제하는 system call, 삭제 성공 여부를 bool로 반환한다.
+ */
 bool remove(const char *file) {
   check_address(file);
   return filesys_remove(file);
 }
 
+/**
+ * @brief 파일을 여는 system call
+ */
 int open(const char *file) {
   check_address(file);
   struct thread *t = thread_current();
@@ -202,9 +230,8 @@ int open(const char *file) {
   if (file_obj == NULL) {
     return -1;
   }
-  // if (!strcmp(t->name, file)) {
-  //   file_deny_write(file_obj);
-  // }
+  
+  // 파일을 열고 fd_table에 추가
   int fd = add_file_to_fd_table(file_obj);
 
   if (fd == -1) {
@@ -213,34 +240,32 @@ int open(const char *file) {
   return fd;
 }
 
+/**
+ * @brief 열린 파일을 fd_table에 넣고 table의 index(fd)를 반환
+ */
 int add_file_to_fd_table(struct file *file) {
 	struct thread *t = thread_current();
 	struct file **fdt = t->fd_table;
-	int i;
-	// while (fdt[t->fd_idx] != NULL && t->fd_idx < FDCOUNT_LIMIT) {
-	// 	t->fd_idx++;
-	// }
-
-	// if (t->fd_idx >= FDCOUNT_LIMIT) {
-	// 	return -1;
-	// }
-	// fdt[t->fd_idx] = file;
-	// return t->fd_idx;
-  int fd = -1;
+	int i, fd = -1;
   for (i = 2; i < FDCOUNT_LIMIT; i++) {
     if (fdt[i] == NULL) {
       fdt[i] = file;
       fd = i;
-      if (i > t->fd_idx)
+      if (i > t->fd_idx) {
         t->fd_idx = i;
+      }
       break;
     }
   }
-  if (i == FDCOUNT_LIMIT)
+  if (i == FDCOUNT_LIMIT) {
     t->fd_idx = FDCOUNT_LIMIT;
+  }
   return fd;
 }
 
+/**
+ * @brief 열린 파일의 크기를 반환하는 system call
+ */
 int filesize(int fd) {
   struct file *file = fd_to_file(fd);
   if (file == NULL) {
@@ -249,6 +274,9 @@ int filesize(int fd) {
   return file_length(file);
 }
 
+/**
+ * @brief fd를 file로 전환
+ */
 struct file *fd_to_file(int fd) {
   if (fd < 0 || fd >= FDCOUNT_LIMIT) {
     return NULL;
@@ -261,6 +289,9 @@ struct file *fd_to_file(int fd) {
   return file;
 }
 
+/**
+ * @brief 파일을 읽는 system call, 읽은 byte 수를 반환
+ */
 int read(int fd, void *buffer, unsigned size) {
   check_address(buffer);
   uint8_t *buf = buffer;
@@ -292,13 +323,16 @@ int read(int fd, void *buffer, unsigned size) {
   return read_count;
 }
 
+/**
+ * @brief 파일 내용을 작성하는 system call, 작성한 byte 수 반환
+ */
 int write(int fd, const void *buffer, unsigned size) {
   check_address(buffer);
-  int read_count;
+  int write_count;
 
   if (fd == STDOUT_FILENO) {
     putbuf(buffer, size);
-    read_count = size;
+    write_count = size;
   } else if (fd == STDIN_FILENO) {
     return 0;
   } else {
@@ -309,36 +343,43 @@ int write(int fd, const void *buffer, unsigned size) {
 
     // exclusive read & write
     lock_acquire(inode_get_lock(file_get_inode(filep)));
-    read_count = file_write(filep, buffer, size);
+    write_count = file_write(filep, buffer, size);
     lock_release(inode_get_lock(file_get_inode(filep)));
   }
-  return read_count;
+  return write_count;
 }
 
+/**
+ * @brief 파일 내의 커서 위치를 변경하는 system call
+ */
 void seek(int fd, unsigned position) {
   if (fd < 2) {
     return;
   }
   struct file *file = fd_to_file(fd);
-  // check_address(file);
   if (file == NULL) {
     return;
   }
   file_seek(file, position);
 }
 
+/**
+ * @brief 파일 내의 커서 위치를 반환하는 system call
+ */
 unsigned tell(int fd) {
   if (fd < 2) {
     return;
   }
   struct file *file = fd_to_file(fd);
-  // check_address(file);
   if (file == NULL) {
     return;
   }
   return file_tell(file);
 }
 
+/**
+ * @brief 파일을 닫는 system call
+ */
 void close(int fd) {
   struct file *file = fd_to_file(fd);
   if (file == NULL) {
@@ -348,6 +389,9 @@ void close(int fd) {
   file_close(file);
 }
 
+/**
+ * @brief fd_table에서 해당 file을 제거하는 함수
+ */
 void delete_file_from_fd_table(int fd) {
 	struct thread *t = thread_current();
   if (fd < 0 || fd >= FDCOUNT_LIMIT)

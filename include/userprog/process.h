@@ -12,7 +12,7 @@ void process_activate (struct thread *next);
 
 /**SECTION - Additional Decl*/
 void argument_stack(int argc, char **argv, struct intr_frame *if_);
-
+struct child_info *tid_to_child_info(tid_t child_tid);
 /**!SECTION - Additional Decl*/
 
 #endif /* userprog/process.h */

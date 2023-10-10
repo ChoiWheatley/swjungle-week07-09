@@ -236,10 +236,10 @@ thread_create (const char *name, int priority,
   t->tf.eflags = FLAG_IF;
 
 #ifdef USERPROG
-  struct child_info *ch_info = (struct child_info *) malloc(sizeof(struct child_info));
-  ch_info->pid = tid;
-  ch_info->th = t;
-  ch_info->exited = false;
+  struct child_info *ch_info = (struct child_info *) malloc(sizeof(struct child_info));   // 자식의 유서 새로 할당
+  ch_info->pid = tid;  // 자식의 주민 등록 번호
+  ch_info->th = t;  // 자식 thread의 포인터 등록
+  ch_info->exited = false;  // 자식의 사망 여부
 
   t->fd_table = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
   if (t->fd_table == NULL) {
@@ -393,7 +393,7 @@ void
 set_priority (struct thread *target, int new_priority) {
   target->priority = new_priority;
   /* ready_list가 비어 있지 않고, 새로 생성한 priority와 현재 실행중인 priority를 비교해서 새로 생성한 priority가 더 크다면 yield해서 선점  */
-  if (!list_empty(&ready_list) && target->priority < get_thread_elem(list_front(&ready_list))->priority)
+  if (!list_empty(&ready_list) && target->priority < elem_to_thread(list_front(&ready_list))->priority)
   thread_yield();
 }
 
@@ -542,7 +542,7 @@ next_thread_to_run (void) {
   } else {
     struct list_elem *max_elem = list_max(&ready_list, priority_asc, NULL);
     list_remove(max_elem);
-    return get_thread_elem(max_elem);
+    return elem_to_thread(max_elem);
   }
 }
 
@@ -650,24 +650,24 @@ void update_priority() {
 
       for (struct list_elem *d_elem = list_begin(&g_thread_pool);
            d_elem != list_end(&g_thread_pool); d_elem = list_next(d_elem)) {
-        update_recent_cpu(get_thread_d_elem(d_elem));
+        update_recent_cpu(d_elem_to_thread(d_elem));
       }
     }
     
     // recalculate priority of all threads
     for (struct list_elem *d_elem = list_begin(&g_thread_pool);
          d_elem != list_end(&g_thread_pool); d_elem = list_next(d_elem)) {
-      set_priority_mlfqs(get_thread_d_elem(d_elem));
+      set_priority_mlfqs(d_elem_to_thread(d_elem));
     }
     list_sort(&ready_list, origin_priority_dsc, NULL);
   }
 }
 
-struct thread *get_thread_elem(const struct list_elem *e) {
+struct thread *elem_to_thread(const struct list_elem *e) {
   return list_entry(e, struct thread, elem);
 }
 
-struct thread *get_thread_d_elem(const struct list_elem *e) {
+struct thread *d_elem_to_thread(const struct list_elem *e) {
   return list_entry(e, struct thread, d_elem);
 }
 
@@ -682,7 +682,7 @@ int get_priority(struct thread *target) {
   // not empty list
   struct list_elem *max_elem = list_max(&target->donation_list, priority_asc_d, NULL);
 
-  return get_priority(get_thread_d_elem(max_elem));
+  return get_priority(d_elem_to_thread(max_elem));
 }
 
 int get_nice(struct thread *target) {
@@ -780,8 +780,8 @@ bool priority_asc(const struct list_elem *a, const struct list_elem *b, void *au
  * @brief d_elem으로 donation_list에 priority 내림차순 정렬
  */
 bool priority_dsc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
-  struct thread *a_th = get_thread_d_elem(a);
-  struct thread *b_th = get_thread_d_elem(b);
+  struct thread *a_th = d_elem_to_thread(a);
+  struct thread *b_th = d_elem_to_thread(b);
   
   return get_priority(a_th) > get_priority(b_th);
 }
@@ -790,8 +790,8 @@ bool priority_dsc_d(const struct list_elem *a, const struct list_elem *b, void *
  * @brief d_elem으로 donation_list에 priority 오름차순 정렬
  */
 bool priority_asc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
-  struct thread *a_th = get_thread_d_elem(a);
-  struct thread *b_th = get_thread_d_elem(b);
+  struct thread *a_th = d_elem_to_thread(a);
+  struct thread *b_th = d_elem_to_thread(b);
   
   return get_priority(a_th) < get_priority(b_th);
 }
@@ -820,8 +820,8 @@ bool origin_priority_asc(const struct list_elem *a, const struct list_elem *b, v
  * @brief d_elem으로 origin priority 내림차순 정렬
  */
 bool origin_priority_dsc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
-  struct thread *a_th = get_thread_d_elem(a);
-  struct thread *b_th = get_thread_d_elem(b);
+  struct thread *a_th = d_elem_to_thread(a);
+  struct thread *b_th = d_elem_to_thread(b);
 
   return a_th->priority > b_th->priority;
 }
@@ -830,8 +830,8 @@ bool origin_priority_dsc_d(const struct list_elem *a, const struct list_elem *b,
  * @brief d_elem으로 origin priority 오름차순 정렬
  */
 bool origin_priority_asc_d(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
-  struct thread *a_th = get_thread_d_elem(a);
-  struct thread *b_th = get_thread_d_elem(b);
+  struct thread *a_th = d_elem_to_thread(a);
+  struct thread *b_th = d_elem_to_thread(b);
 
   return a_th->priority < b_th->priority;
 }

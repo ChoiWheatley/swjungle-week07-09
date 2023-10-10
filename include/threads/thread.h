@@ -101,35 +101,35 @@ struct child_info {
  * blocked state is on a semaphore wait list. */
 struct thread {
   /* Owned by thread.c. */
-  tid_t tid;                 /* Thread identifier. */
-  enum thread_status status; /* Thread state. */
-  char name[16];             /* Name (for debugging purposes). */
-  int priority;              /* Priority. */
+  tid_t tid;                 	/* Thread identifier. */
+  enum thread_status status; 	/* Thread state. */
+  char name[16];             	/* Name (for debugging purposes). */
+  int priority;              	/* Priority. */
 
-  int64_t local_tick;        /* `timer_sleep`에서 저장할 로컬 틱 */
-  struct lock *wait_on_lock; /* 내가 기다리고 있는 lock */
+  int64_t local_tick;        	/* `timer_sleep`에서 저장할 로컬 틱 */
+  struct lock *wait_on_lock; 	/* 내가 기다리고 있는 lock */
 
   /* Shared between thread.c and synch.c. */
-  struct list_elem elem; /* List element used for ready list OR waiters list */
+  struct list_elem elem; 		/* List element used for ready list OR waiters list */
 
-  struct list donation_list; /* 내가 가진 lock들의 waiter들 중 최대 priority를
+  struct list donation_list; 	/* 내가 가진 lock들의 waiter들 중 최대 priority를
                                 가진 스레드들의 d_elem 연결리스트*/
-  struct list_elem d_elem; /* donation 리스트의 원소 */
+  struct list_elem d_elem; 		/* donation 리스트의 원소 */
 
-  int nice; /* 다른 스레드에게 얼마나 CPU time을 퍼줄 것인지 */
-  fixed_point recent_cpu; /* 스레드가 CPU time을 얼마나 점유하고 있는지 */
+  int nice; 					/* 다른 스레드에게 얼마나 CPU time을 퍼줄 것인지 */
+  fixed_point recent_cpu; 		/* 스레드가 CPU time을 얼마나 점유하고 있는지 */
 #ifdef USERPROG
   /* Owned by userprog/process.c. */
-  int exit_status; /* exit 했는지 확인하기 위한 status */
-  int fd_idx;
+  int exit_status; 				/* exit 했는지 확인하기 위한 status */
+  int fd_idx;					/* file이 추가된 가장 높은 fd 번호 */
 
-  uint64_t *pml4;         /* Page map level 4 */
-  struct file **fd_table; /* file descriptor table */
-  struct file *running;
-  struct list child_list;
-  struct thread *parent;
-  struct semaphore wait_sema;
-  struct semaphore fork_sema;
+  uint64_t *pml4;         		/* Page map level 4 */
+  struct file **fd_table; 		/* file descriptor table */
+  struct file *running;			/* 현재 실행중인 파일 */
+  struct list child_list;		/* 호적 */
+  struct thread *parent;		/* 부모 thread의 포인터 저장 */
+  struct semaphore wait_sema;	/* wait를 위한 sema */
+  struct semaphore fork_sema;	/* fork를 위한 sema */
   // struct semaphore exit_sema;
 #endif
 #ifdef VM
@@ -183,8 +183,8 @@ void thread_wakeup(); // sleep_list에서 자기 차례가 되면 ready_list로
                       // unblock해서 list_push_back 함수
 void update_priority();
 
-struct thread *get_thread_elem(const struct list_elem *elem);
-struct thread *get_thread_d_elem(const struct list_elem *elem);
+struct thread *elem_to_thread(const struct list_elem *elem);
+struct thread *d_elem_to_thread(const struct list_elem *elem);
 
 int get_priority(struct thread *target);
 int get_nice(struct thread *target);

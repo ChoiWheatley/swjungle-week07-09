@@ -2,6 +2,7 @@
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/inode.h"
 #include "include/lib/stdio.h"
 #include "intrinsic.h"
 #include "threads/flags.h"
@@ -30,6 +31,8 @@ static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
 static void __do_fork(void *);
+
+struct child_info *tid_to_child_info(tid_t);
 
 /* General process initializer for initd and other process. */
 static void process_init(void) { struct thread *current = thread_current(); }
@@ -78,28 +81,32 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED) {
   // TODO - do wait until child process done fork
   struct thread *cur = thread_current();
   struct list_elem *e;
-  struct list *c_list = &cur->child_list;
+  struct list *c_list = &cur->child_list;  // 자식의 유서 장부
   struct thread *child_th;
   struct child_info *ch_info;
 
   /* Clone current thread to new thread.*/
   tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, thread_current());
-  if (tid == TID_ERROR) {
+  if (tid == TID_ERROR) {  // 자식이 create가 되지 않은 경우
     return TID_ERROR;
   }
   // cur(부모)의 child_list에 위에서 create한 자식의 child_info의 c_elem이 들어가있다.
   // 방금 추가된 child_info를 tid로 찾는다.
   // 찾은 tid로 방금 생성된 thread를 찾는다.
   // 방금 생성된 thread의 fork_sema를 sema_down한다.
-  for (e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
-    ch_info = list_entry(e, struct child_info, c_elem);  // 자식의 유서
-    if (tid == ch_info->pid) {  // 기다리려는 자식이 맞다면
-      child_th = ch_info->th;  // 자식의 thread// 내 자식이 맞다!
-      sema_down(&child_th->fork_sema);
-      break;
-    }
-  }
-  if (child_th->exit_status == -1) {
+  // for (e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
+  //   ch_info = list_entry(e, struct child_info, c_elem);  // 자식의 유서
+  //   if (tid == ch_info->pid) {  // 기다리려는 자식이 맞다면
+  //     child_th = ch_info->th;  // 자식의 thread// 내 자식이 맞다!
+  //     sema_down(&child_th->fork_sema);
+  //     break;
+  //   }
+  // }
+  ch_info = tid_to_child_info(tid);
+  child_th = ch_info->th;
+  sema_down(&child_th->fork_sema);
+
+  if (child_th->exit_status == -1) {  // 자식이 fork가 제대로 되지 않고 종료된 경우
     return TID_ERROR;
   }
   return tid;
@@ -213,11 +220,11 @@ static void __do_fork(void *aux) {
   process_init();
 
   /* Finally, switch to the newly created process. */
-  // TODO - sema_up(parent.fork_sema)
   sema_up(&current->fork_sema);
   if (succ)
     do_iret(&if_);
-error:
+
+error:  // fork가 제대로 되지 않은 경우
   current->exit_status = -1;
   sema_up(&current->fork_sema);
   exit(-1);
@@ -233,8 +240,8 @@ int process_exec(void *f_name) {
   char *argv[128] = {
       0,
   };
-  char *token, *save_ptr; // Tokenizing을 위한 지역변수 선언
-  int argc = 0;
+  char *token, *save_ptr; // token화 하기 위한 변수
+  int argc = 0;  // argument 개수
 
   for (token = strtok_r(file_name, " ", &save_ptr); token != NULL;
        token = strtok_r(NULL, " ", &save_ptr)) {
@@ -261,8 +268,8 @@ int process_exec(void *f_name) {
 
   /* 유저스택에 인자 추가 */
   argument_stack(argc, argv, &_if);
-
   palloc_free_page(file_copy);
+  
   /* 프로세스 전환하여 실행 */
   do_iret(&_if);
   NOT_REACHED();
@@ -278,59 +285,50 @@ int process_exec(void *f_name) {
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
 int process_wait(tid_t child_tid UNUSED) {
-  // thread_sleep(150);
-  // TODO - child_list를 순회. pid 없으면 -1 리턴, 있다면 exited 여부 &
-  // exit_status 검사
-  struct thread *curr = thread_current();
-  struct thread *child_th;
-  struct list *c_list = &curr->child_list;
-  struct list_elem *e;
+  // struct thread *curr = thread_current();
+  // struct thread *child_th;
+  // struct list *c_list = &curr->child_list;  // 호적
+  // struct list_elem *e;
   struct child_info *ch_info;
-  bool is_child = false;  // 내 자식이 맞는가
+  // bool is_child = false;  // 받은 주민번호가 내 자식의 것이 맞는가
 
-  if (!list_empty(c_list)) {  // 자식이 존재한다면
-    for (e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
-      ch_info = list_entry(e, struct child_info, c_elem);  // 자식의 유서
-      if (child_tid == ch_info->pid) {  // 기다리려는 자식이 맞다면
-        child_th = ch_info->th;  // 자식의 thread
-        is_child = true;  // 내 자식이 맞다!
-        break;
-      }
-    }
-  }
-  if (is_child) {  // 기다리려는 자식이 내 자식이 맞는 경우
+  /* 호적을 순회하며 내 자식의 주민번호인지 확인 */
+  // if (!list_empty(c_list)) {  // 자식이 존재한다면
+  //   for (e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
+  //     ch_info = list_entry(e, struct child_info, c_elem);  // 자식의 유서
+  //     if (child_tid == ch_info->pid) {  // 기다리려는 자식이 맞다면
+  //       child_th = ch_info->th;  // 자식의 thread
+  //       is_child = true;  // 내 자식이 맞다!
+  //       break;
+  //     }
+  //   }
+  // }
+  // if (is_child) {  // 기다리려는 자식이 내 자식이 맞는 경우
+  //   bool exited = ch_info->exited;
+  //   if (exited == 0) {  // 자식이 아직 살아있다면
+  //     sema_down(&child_th->wait_sema);  // 자식이 죽을 때까지 기다림
+  //   }
+
+  //   int child_status = ch_info->exit_status;  // 자식의 사망 원인 조사
+  //   list_remove(e);  // 호적에서 제거
+  //   free(ch_info);  // 주민등록 말소 (사망신고 처리)
+  //   return child_status;
+  // } else {  // 기다리려는 자식이 내 자식이 아닌 경우
+  //   return -1;
+  // }
+  
+  if ((ch_info = tid_to_child_info(child_tid)) != NULL) {
     bool exited = ch_info->exited;
-    if (exited == 0) {  // 자식이 아직 살아있다면
-      sema_down(&child_th->wait_sema);  // 자식이 죽을 때까지 기다림
+    if (exited == 0) {
+      sema_down(&ch_info->th->wait_sema);
     }
-
     int child_status = ch_info->exit_status;  // 자식의 사망 원인 조사
-    list_remove(e);  // 호적에서 제거
+    list_remove(&ch_info->c_elem);  // 호적에서 제거
     free(ch_info);  // 주민등록 말소 (사망신고 처리)
     return child_status;
   } else {  // 기다리려는 자식이 내 자식이 아닌 경우
     return -1;
   }
-
-  /* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
-   * XXX:       to add infinite loop here before
-   * XXX:       implementing the process_wait. */
-
-  /**
-   * cases:
-   * - 자식이 살아있는 경우) sema_down until child process die with `exit`
-   * - 자식이 살아있었는데 비정상적으로 종료된 경우) 자식이 sema_up을 해주고
-   * 죽어야 함.
-   * - 자식이 이미 죽은 경우) exited이 true라서 바로 exit_status를 리턴.
-   *
-   * TODO child가 exit할 때 sema_up을 호출하여 깨어나도록 본인 스레드의
-   * semaphore를 낮춘다. 이때 semaphore의 값을 0으로 바꿔주어야 한다.
-   */
-  // sema_down(&thread_current()->wait_sema);
-}
-
-static struct child_info * e_to_child_info(struct list_elem *e) {
-  return list_entry(e, struct child_info, c_elem);
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -341,16 +339,16 @@ void process_exit(void) {
    * TODO: project2/process_termination.html).
    * TODO: We recommend you to implement process resource cleanup here.
    */
-  // file 해제
+  /* file 해제 */
   for (int i = 2; i < t->fd_idx; i++) {
     if (t->fd_table[i] != NULL) {
       close(i);
     }
   }
   palloc_free_multiple(t->fd_table, FDT_PAGES);
-  file_close(t->running);
+  file_close(t->running); // 실행중인 파일 닫기
 
-  // 부모의 child_list 원소를 수정. { exit_status, exited }
+  /* 부모가 가진 내 유서를 수정. { exit_status(사망 원인), exited(사망 여부) } */
   if (t->parent != NULL) {
     struct list *c_list = &t->parent->child_list;
     for (struct list_elem *e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
@@ -363,12 +361,14 @@ void process_exit(void) {
     }
   }
 
+  /* 내가 가진 자식들의 유서 전부 폐기 */
   while (!list_empty(&t->child_list)) {
     struct child_info *ch_info = list_entry(list_pop_front(&t->child_list), struct child_info, c_elem);
     ch_info->th->parent = NULL;
     free(ch_info);
   }
-  // 모든 semaphore up
+
+  /* 나의 죽음을 기다리던 부모가 있다면 깨우기 */
   sema_up(&t->wait_sema);
 
   process_cleanup();
@@ -538,14 +538,17 @@ static bool load(const char *file_name, struct intr_frame *if_) {
   file_deny_write(file); // 실행 중인 파일은 수정할 수 없다.
 
   /* Read and verify executable header. */
+  lock_acquire(inode_get_lock(file_get_inode(file)));
   if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr ||
       memcmp(ehdr.e_ident, "\177ELF\2\1\1", 7) || ehdr.e_type != 2 ||
       ehdr.e_machine != 0x3E // amd64
       || ehdr.e_version != 1 || ehdr.e_phentsize != sizeof(struct Phdr) ||
       ehdr.e_phnum > 1024) {
+    lock_release(inode_get_lock(file_get_inode(file)));
     printf("load: %s: error loading executable\n", file_name);
     goto done;
   }
+  lock_release(inode_get_lock(file_get_inode(file)));
 
   /* Read program headers. */
   file_ofs = ehdr.e_phoff;
@@ -556,8 +559,12 @@ static bool load(const char *file_name, struct intr_frame *if_) {
       goto done;
     file_seek(file, file_ofs);
 
-    if (file_read(file, &phdr, sizeof phdr) != sizeof phdr)
+    lock_acquire(inode_get_lock(file_get_inode(file)));
+    if (file_read(file, &phdr, sizeof phdr) != sizeof phdr) {
+      lock_release(inode_get_lock(file_get_inode(file)));
       goto done;
+    }
+    lock_release(inode_get_lock(file_get_inode(file)));
     file_ofs += sizeof phdr;
     switch (phdr.p_type) {
     case PT_NULL:
@@ -615,6 +622,20 @@ done:
   /* We arrive here whether the load is successful or not. */
   // file_close(file); load에서 file을 닫으면 lock이 풀린다.
   return success;
+}
+
+struct child_info *tid_to_child_info(tid_t child_tid) {
+  struct thread *t = thread_current();
+  struct list *c_list = &t->child_list;
+  struct list_elem *e;
+  struct child_info *ch_info;
+  for (e = list_begin(c_list); e != list_end(c_list); e = list_next(e)) {
+    ch_info = list_entry(e, struct child_info, c_elem);  // 자식의 유서
+    if (ch_info->pid == child_tid) {  // 기다리려는 자식이 맞다면 자식의 thread// 내 자식이 맞다!
+      return ch_info;
+    }
+  }
+  return NULL;
 }
 
 /* Checks whether PHDR describes a valid, loadable segment in

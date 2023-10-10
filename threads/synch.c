@@ -115,7 +115,7 @@ sema_up (struct semaphore *sema) {
 	if (!list_empty (&sema->waiters)) {
 		// semaphore의 waiter들 중 max priority를 가지는 thread의 elem
 		struct list_elem *max_e = list_max(&sema->waiters, priority_asc, NULL);
-		struct thread *max_t = get_thread_elem(max_e);
+		struct thread *max_t = elem_to_thread(max_e);
 		list_remove(max_e);
 		thread_unblock(max_t);
 		if (!intr_context() && get_priority(max_t) > thread_get_priority()) {
@@ -200,7 +200,7 @@ void lock_acquire(struct lock *lock) {
   struct thread *cur = thread_current();
   struct list *dlist = &lock->holder->donation_list;
   struct list *waiters = &lock->semaphore.waiters;
-  struct thread *waiter_max = get_thread_elem(list_max(waiters, origin_priority_asc, NULL));
+  struct thread *waiter_max = elem_to_thread(list_max(waiters, origin_priority_asc, NULL));
 
 	if (lock->semaphore.value == 0) {
 		// lock 획득에 실패
@@ -256,7 +256,7 @@ lock_release (struct lock *lock) {
 	
 	struct list *waiters = &lock->semaphore.waiters; // thread::elem 원소들을 가지고 있음.
 	struct list_elem *waiter_max_e = list_max(waiters, origin_priority_asc, NULL);
-	struct thread *waiter_max_t = get_thread_elem(waiter_max_e);
+	struct thread *waiter_max_t = elem_to_thread(waiter_max_e);
 	struct thread *lock_holder = lock->holder;
 	
 	if (lock_holder->priority < waiter_max_t->priority) {
@@ -268,7 +268,7 @@ lock_release (struct lock *lock) {
 	// max priority를 가진 thread의 d_elem을 donation_list에 추가한다
 	if (!list_empty(waiters)) {
 		struct list_elem *waiter_max_donated_e = list_max(waiters, priority_asc, NULL);
-		struct thread *soon_unblock = get_thread_elem(waiter_max_donated_e);
+		struct thread *soon_unblock = elem_to_thread(waiter_max_donated_e);
 
 		if (soon_unblock->priority < waiter_max_t->priority) {
 			// d_list에 추가하기 때문에 `d_elem`을 가리킨다.
