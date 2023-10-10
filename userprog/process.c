@@ -197,8 +197,9 @@ static void __do_fork(void *aux) {
    *       from the fork() until this function successfully duplicates
    *       the resources of parent.
    */
-  if (parent->fd_idx == FDCOUNT_LIMIT)
-    goto error;
+  // 파일을 읽지 못한다는 이유로 처형하는 코드 삭제
+  // if (parent->fd_idx == FDCOUNT_LIMIT)
+  //   goto error;
 
   for (int i = 2; i < FDCOUNT_LIMIT; i++) {
     if (parent->fd_table[i] != NULL) {
