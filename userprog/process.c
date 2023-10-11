@@ -33,6 +33,7 @@ static void initd(void *f_name);
 static void __do_fork(void *);
 
 struct child_info *tid_to_child_info(tid_t);
+struct semaphore g_load_sema;
 
 /* General process initializer for initd and other process. */
 static void process_init(void) { struct thread *current = thread_current(); }
@@ -45,6 +46,8 @@ static void process_init(void) { struct thread *current = thread_current(); }
 tid_t process_create_initd(const char *file_name) {
   char *fn_copy, *token, *saveptr;
   tid_t tid;
+  
+  sema_init(&g_load_sema, 1);
 
   /* Make a copy of FILE_NAME.
    * Otherwise there's a race between the caller and load(). */
@@ -260,15 +263,21 @@ int process_exec(void *f_name) {
   process_cleanup();
 
   /* 이후에 바이너리 파일 로드 */
+
+  sema_down(&g_load_sema);
   success = load(argv[0], &_if);
+
   if (!success) {
     palloc_free_page(file_copy);
+    sema_up(&g_load_sema);
     return -1;
   }
 
   /* 유저스택에 인자 추가 */
   argument_stack(argc, argv, &_if);
   palloc_free_page(file_copy);
+
+  sema_up(&g_load_sema);
   
   /* 프로세스 전환하여 실행 */
   do_iret(&_if);
@@ -527,6 +536,7 @@ static bool load(const char *file_name, struct intr_frame *if_) {
   }
 
   /* Open executable file. */
+  printf("[%s] %s trying to open %s...\n", __func__, t->name, file_name);
   file = filesys_open(file_name);
   if (file == NULL) {
     file_close(file);
