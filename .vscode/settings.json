@@ -1,28 +1,7 @@
 {
-    // "files.associations": {
-    //     "*.html": "html",
-    //     "list.h": "c",
-    //     "*.inc": "c",
-    //     "interrupt.h": "c",
-    //     "stdlib.h": "c",
-    //     "stdio.h": "c",
-    //     "array": "c",
-    //     "string_view": "c",
-    //     "initializer_list": "c",
-    //     "utility": "c"
-    // },
     "C_Cpp.default.defines": [
-        "USERPROG"
+        "USERPROG",
+        "VM"
     ],
     "C_Cpp.default.compilerPath": "/usr/bin/gcc-11",
-    "files.associations": {
-        "stdio.h": "c",
-        "filesys.h": "c",
-        "*.inc": "c",
-        "gdt.h": "c",
-        "intrinsic.h": "c",
-        "syscall.h": "c",
-        "file.h": "c",
-        "synch.h": "c"
-    }
 }
