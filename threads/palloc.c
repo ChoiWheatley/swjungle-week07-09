@@ -11,6 +11,9 @@
 #include "threads/loader.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
+#include "threads/thread.h"
+#include "threads/mmu.h"
 
 /* Page allocator.  Hands out memory in page-size (or
    page-multiple) chunks.  See malloc.h for an allocator that
@@ -53,7 +56,9 @@ struct multiboot_info {
 	uint32_t mmap_base;
 };
 
-/* e820 entry */
+/** 
+ * @brief e820 entry. BIOS가 DRAM으로부터 가용용량 등의 정보를 받아온다.
+ **/
 struct e820_entry {
 	uint32_t size;
 	uint32_t mem_lo;
@@ -267,6 +272,8 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt) {
 	size_t page_idx = bitmap_scan_and_flip (pool->used_map, 0, page_cnt, false);
 	lock_release (&pool->lock);
 	void *pages;
+	struct page *page = NULL;
+	struct thread *cur = thread_current();
 
 	if (page_idx != BITMAP_ERROR)
 		pages = pool->base + PGSIZE * page_idx;
@@ -274,8 +281,24 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt) {
 		pages = NULL;
 
 	if (pages) {
-		if (flags & PAL_ZERO)
+
+		if (flags & PAL_ZERO) {
 			memset (pages, 0, PGSIZE * page_cnt);
+		}
+		if (flags & PAL_USER) {
+			// TODO - 물리메모리로 일대일 매핑이 되는 PTE를 PML4에 등록시켜준다.
+			// NOTE - kpage `pages`로부터 upage를 만드는 아래의 방식이 맞는지 의심이 된다.
+			pml4_set_page(cur->pml4, (void *)vtop(pages), pages, true);
+			if((page = (struct page *)malloc(sizeof(page))) == NULL) {
+				PANIC("malloc failed ☠️");
+			}
+			// page = (struct page){
+			// 	.va = pages,
+			// 	.
+			// };
+			// spt에 해당 페이지를 등록.
+			spt_insert_page(&cur->spt, );
+		}
 	} else {
 		if (flags & PAL_ASSERT)
 			PANIC ("palloc_get: out of pages");

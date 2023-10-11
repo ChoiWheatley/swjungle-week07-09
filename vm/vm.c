@@ -3,6 +3,7 @@
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include "threads/pte.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -36,6 +37,7 @@ page_get_type (struct page *page) {
 static struct frame *vm_get_victim (void);
 static bool vm_do_claim_page (struct page *page);
 static struct frame *vm_evict_frame (void);
+static unsigned page_hash(const struct hash_elem *p_, void *aux UNUSED);
 
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
@@ -60,33 +62,52 @@ err:
 	return false;
 }
 
-/* Find VA from spt and return page. On error, return NULL. */
+/** 
+ * @brief Find VA from spt and return page. On error, return NULL. 
+*/
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	// TODO demand paging을 위한 조건을 추가해줘야 함
+	uint64_t pte_addr = PTE_ADDR(va);
 	struct page *page = NULL;
-	/* TODO: Fill this function. */
+	struct hash_iterator i;
 
-	struct hash_elem *e = hash_find(&spt->page_map, &page->hash_elem);
-	// TODO e 갖고 놀기
+    hash_first(&i, &spt->page_map);
+    while (hash_next(&i)) {
+			// do iteration
+			struct page *f = hash_entry(hash_cur(&i), struct page, hash_elem);
+			if (f->va == va) {
+				page = f;
+				break;
+			}
+    }
 
 	return page;
 }
 
-/* Insert PAGE into spt with validation. */
+/** 
+ * @brief Insert PAGE into spt with validation. 
+ */
 bool
 spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
 	int succ = false;
-	/* TODO: Fill this function. */
+
+	if (page) { // TODO - page validation
+		succ = true;
+		hash_insert(&spt->page_map, &page->hash_elem);
+	}
 
 	return succ;
 }
 
+/**
+ * @brief spt로부터 page를 해제한다.
+ */
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
+	ASSERT(hash_delete(&spt->page_map, &page->hash_elem));
 	vm_dealloc_page (page);
-	return true;
 }
 
 /* Get the struct frame, that will be evicted. */

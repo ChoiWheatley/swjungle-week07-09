@@ -92,11 +92,7 @@ struct supplemental_page_table {
 
 	// manage struct page by bitmap
 	struct hash page_map; // hash table for supplemental page table
-
-	uint64_t used_map; // bitmap for used pages
 	uint64_t base; // base address of supplemental page table
-
-
 };
 
 #include "threads/thread.h"
