@@ -57,6 +57,13 @@ Project 3에서 팀이 섞이고 코드가 섞이기 때문에 혼란을 최소�
 
 C 코드 포매팅 (`C_Cpp.clang_format_style`)은 LLVM을 사용합니다. 일단 자주 사용하는 파일만 전체 포매팅 돌렸습니다.
 
+```json
+{
+  "C_Cpp.clang_format_style": "{ ColumnLimit: 80, IndentWidth: 4, TabWidth: 4 }",
+  "C_Cpp.clang_format_fallbackStyle": "LLVM",
+}
+```
+
 [Doxygen Documentation Generator](https://marketplace.visualstudio.com/items?itemName=cschlosser.doxdocgen)를 사용하여 기존에 `///` 또는 `/***/`을 사용한 docstring 자동생성에 더 많은 기능과 자동완성을 제공해 줄 수 있습니다.
 
 [Markdown Lint](https://marketplace.visualstudio.com/items?itemName=DavidAnson.vscode-markdownlint)는 md파일을 작성할 때 파일 깨지는 현상을 사전에 방지해 줄 수 있습니다.
