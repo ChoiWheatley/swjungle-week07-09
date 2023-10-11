@@ -23,7 +23,6 @@
 #include <string.h>
 
 #ifdef VM
-#include "process.h"
 #include "vm/vm.h"
 #endif
 
