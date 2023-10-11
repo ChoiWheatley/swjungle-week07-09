@@ -63,8 +63,12 @@ err:
 /* Find VA from spt and return page. On error, return NULL. */
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
+	// TODO demand paging을 위한 조건을 추가해줘야 함
 	struct page *page = NULL;
 	/* TODO: Fill this function. */
+
+	struct hash_elem *e = hash_find(&spt->page_map, &page->hash_elem);
+	// TODO e 갖고 놀기
 
 	return page;
 }
@@ -135,6 +139,12 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
+
+	page = spt_find_page(spt, addr);
+	// TODO stack growth, file-mapped의 경우 valid한 page를 만들어줘야 함
+	// TODO demand paging의 경우 valid한 page를 만들어줘야 함
+
+
 	/* TODO: Your code goes here */
 
 	return vm_do_claim_page (page);
@@ -171,9 +181,25 @@ vm_do_claim_page (struct page *page) {
 	return swap_in (page, frame->kva);
 }
 
+static bool page_less(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED) {
+	struct page *page_a = hash_entry(a, struct page, hash_elem);
+	struct page *page_b = hash_entry(b, struct page, hash_elem);
+
+	return page_a->va < page_b->va;
+}
+
+static unsigned page_hash(const struct hash_elem *p_, void *aux UNUSED) {
+	const struct page *p = hash_entry(p_, struct page, hash_elem);
+	return hash_bytes(&p->va, sizeof p->va);
+}
+
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+	// hash init
+	hash_init(&spt->page_map, page_hash, page_less, NULL);
+
+	// TODO 추가적인 작업 필요
 }
 
 /* Copy supplemental page table from src to dst */
