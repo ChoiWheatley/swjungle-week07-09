@@ -691,6 +691,24 @@ static bool validate_segment(const struct Phdr *phdr, struct file *file) {
   return true;
 }
 
+/* Adds a mapping from user virtual address UPAGE to kernel
+ * virtual address KPAGE to the page table.
+ * If WRITABLE is true, the user process may modify the page;
+ * otherwise, it is read-only.
+ * UPAGE must not already be mapped.
+ * KPAGE should probably be a page obtained from the user pool
+ * with palloc_get_page().
+ * Returns true on success, false if UPAGE is already mapped or
+ * if memory allocation fails. */
+static bool install_page(void *upage, void *kpage, bool writable) {
+  struct thread *t = thread_current();
+
+  /* Verify that there's not already a page at that virtual
+   * address, then map our page there. */
+  return (pml4_get_page(t->pml4, upage) == NULL &&
+          pml4_set_page(t->pml4, upage, kpage, writable));
+}
+
 #ifndef VM
 /* Codes of this block will be ONLY USED DURING project 2.
  * If you want to implement the function for whole project 2, implement it
@@ -771,23 +789,7 @@ static bool setup_stack(struct intr_frame *if_) {
   return success;
 }
 
-/* Adds a mapping from user virtual address UPAGE to kernel
- * virtual address KPAGE to the page table.
- * If WRITABLE is true, the user process may modify the page;
- * otherwise, it is read-only.
- * UPAGE must not already be mapped.
- * KPAGE should probably be a page obtained from the user pool
- * with palloc_get_page().
- * Returns true on success, false if UPAGE is already mapped or
- * if memory allocation fails. */
-static bool install_page(void *upage, void *kpage, bool writable) {
-  struct thread *t = thread_current();
 
-  /* Verify that there's not already a page at that virtual
-   * address, then map our page there. */
-  return (pml4_get_page(t->pml4, upage) == NULL &&
-          pml4_set_page(t->pml4, upage, kpage, writable));
-}
 #else
 /* From here, codes will be used after project 3.
  * If you want to implement the function for only project 2, implement it on the
@@ -854,12 +856,7 @@ static bool lazy_load_segment(struct page *page, void *aux) {
   }
   return true;
   
-  // TODO - read the segment from file to page
-  // NOTE - check `load` from process.c
-
-  // TODO - read program headers (ELF64_PHDR) from file
-  // TODO - on PT_LOAD, do load segment with offset, upage, read_bytes,
-  // zero_bytes, writable
+  // NOTE - USERPROG 시절 load_segment를 복사함. 문제생기면 여기임.
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
