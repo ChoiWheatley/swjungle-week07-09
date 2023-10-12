@@ -117,4 +117,9 @@ void vm_dealloc_page (struct page *page);
 bool vm_claim_page (void *va);
 enum vm_type page_get_type (struct page *page);
 
+/** SECTION - Additional Declaration */
+struct page *page_lookup(struct supplemental_page_table *spt,
+                         const void *address);
+/** !SECTION - Additional Declaration */
+
 #endif  /* VM_VM_H */

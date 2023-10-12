@@ -28,9 +28,13 @@ vm_anon_init (void) {
 bool
 anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
+	bool success = false;
 	page->operations = &anon_ops;
 
 	struct anon_page *anon_page = &page->anon;
+	// TODO - do something with kva
+	
+	return success;
 }
 
 /* Swap in the page by read contents from the swap disk. */

@@ -10,6 +10,7 @@
 #include "threads/interrupt.h"
 #include "threads/mmu.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "userprog/exception.h"
@@ -42,20 +43,20 @@ static void process_init(void) { struct thread *current = thread_current(); }
  * thread id, or TID_ERROR if the thread cannot be created.
  * Notice that THIS SHOULD BE CALLED ONCE. */
 tid_t process_create_initd(const char *file_name) {
-  char *fn_copy, *token, *saveptr;
+  char *fn_copy;
   tid_t tid;
+  char filename_cp[15];
 
   /* Make a copy of FILE_NAME.
    * Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page(0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy(fn_copy, file_name, PGSIZE);
-
-  token = strtok_r(file_name, " ", &saveptr);
+  strlcpy(filename_cp, file_name, strcspn(file_name, " ") + 1);
+  memcpy(fn_copy, (void *)file_name, strlen(file_name) + 1);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create(token, PRI_DEFAULT, initd, fn_copy);
+  tid = thread_create(filename_cp, PRI_DEFAULT, initd, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page(fn_copy);
   return tid;
@@ -63,14 +64,16 @@ tid_t process_create_initd(const char *file_name) {
 
 /* A thread function that launches first user process. */
 static void initd(void *f_name) {
+  printf("[*] 왔니? %p\n", f_name);
 #ifdef VM
   supplemental_page_table_init(&thread_current()->spt);
 #endif
 
   process_init();
 
-  if (process_exec(f_name) < 0)
+  if (process_exec(f_name) < 0) {
     PANIC("Fail to launch initd\n");
+  }
   NOT_REACHED();
 }
 
@@ -233,7 +236,6 @@ error:  // fork가 제대로 되지 않은 경우
  * Returns -1 on fail. */
 int process_exec(void *f_name) {
   char *file_name = f_name;
-  char *file_copy = f_name;
   bool success;
   int i;
   char *argv[128] = {
@@ -261,13 +263,13 @@ int process_exec(void *f_name) {
   /* 이후에 바이너리 파일 로드 */
   success = load(argv[0], &_if);
   if (!success) {
-    palloc_free_page(file_copy);
+    palloc_free_page(file_name);
     return -1;
   }
 
   /* 유저스택에 인자 추가 */
   argument_stack(argc, argv, &_if);
-  palloc_free_page(file_copy);
+  palloc_free_page(file_name);
   
   /* 프로세스 전환하여 실행 */
   do_iret(&_if);
@@ -782,10 +784,34 @@ static bool install_page(void *upage, void *kpage, bool writable) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
+/**
+ * @brief Load the segment from the file
+ * This called when the first page fault occurs on address VA.
+ * VA is available when calling this function.
+ *
+ * @param page pointer to the page
+ * @param aux file pointer that contains loadable object
+ */
 static bool lazy_load_segment(struct page *page, void *aux) {
-  /* TODO: Load the segment from the file */
-  /* TODO: This called when the first page fault occurs on address VA. */
-  /* TODO: VA is available when calling this function. */
+  // cast to file from aux
+  struct file *file = (struct file *)aux;
+  struct thread *t = thread_current();
+  struct ELF ehdr;
+
+  if (file == NULL) {
+    printf("file is null\n");
+    return false;
+  }
+
+  t->running = file;
+  file_deny_write(file);
+
+  // NOTE - check `load` from process.c
+
+  // TODO - read program headers (ELF64_PHDR) from file
+
+  // TODO - on PT_LOAD, do load segment with offset, upage, read_bytes,
+  // zero_bytes, writable
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -816,8 +842,11 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
     size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-    /* TODO: Set up aux to pass information to the lazy_load_segment. */
-    void *aux = NULL;
+    /** 
+     * Set up aux to pass information to the lazy_load_segment. 
+     * NOTE - possibility of memory leak (file)
+     */
+    void *aux = (void *)file;
     if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable,
                                         lazy_load_segment, aux))
       return false;

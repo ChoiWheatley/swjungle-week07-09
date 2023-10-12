@@ -4,6 +4,8 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "threads/pte.h"
+#include "vm/file.h"
+#include <stdio.h>
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -37,29 +39,50 @@ page_get_type (struct page *page) {
 static struct frame *vm_get_victim (void);
 static bool vm_do_claim_page (struct page *page);
 static struct frame *vm_evict_frame (void);
-static unsigned page_hash(const struct hash_elem *p_, void *aux UNUSED);
+static uint64_t page_hash(const struct hash_elem *p_, void *aux UNUSED);
 
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
  * `vm_alloc_page`. */
-bool
-vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
-		vm_initializer *init, void *aux) {
+bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
+                                    bool writable, vm_initializer *init,
+                                    void *aux) {
 
-	ASSERT (VM_TYPE(type) != VM_UNINIT)
-
-	struct supplemental_page_table *spt = &thread_current ()->spt;
+	ASSERT(VM_TYPE(type) != VM_UNINIT)
+	struct page *page = NULL;
+	struct supplemental_page_table *spt = &thread_current()->spt;
 
 	/* Check wheter the upage is already occupied or not. */
-	if (spt_find_page (spt, upage) == NULL) {
-		/* TODO: Create the page, fetch the initialier according to the VM type,
-		 * TODO: and then create "uninit" page struct by calling uninit_new. You
-		 * TODO: should modify the field after calling the uninit_new. */
+	if ((page = spt_find_page(spt, upage)) == NULL) {
+			/* TODO: Create the struct page, fetch the initialier according to the VM type,
+			 * TODO: and then create "uninit" page struct by calling uninit_new. You
+			 * TODO: should modify the field after calling the uninit_new. */
+			page = (struct page *)malloc(sizeof(struct page));
+			uninit_new(page, upage, init, type, aux, NULL /* FIXME */);
+			
+			page->uninit = (struct uninit_page) {
+				.init = init,
+				.type = type,
+				.aux = aux
+			};
 
-		/* TODO: Insert the page into the spt. */
+			/* Insert the page into the spt. */
+			spt_insert_page(spt, page);
 	}
+
+	switch (type) {
+	case VM_ANON:
+			anon_initializer(page, type, page->frame->kva);
+			break;
+	case VM_FILE:
+			file_backed_initializer(page, type, page->frame->kva);
+			break;
+	default:
+			goto err;
+	}
+
 err:
-	return false;
+  return false;
 }
 
 /** 
@@ -67,21 +90,7 @@ err:
 */
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-	// TODO demand paging을 위한 조건을 추가해줘야 함
-	uint64_t pte_addr = PTE_ADDR(va);
-	struct page *page = NULL;
-	struct hash_iterator i;
-
-    hash_first(&i, &spt->page_map);
-    while (hash_next(&i)) {
-			// do iteration
-			struct page *f = hash_entry(hash_cur(&i), struct page, hash_elem);
-			if (f->va == va) {
-				page = f;
-				break;
-			}
-    }
-
+	struct page *page = page_lookup(spt, va);
 	return page;
 }
 
@@ -209,7 +218,7 @@ static bool page_less(const struct hash_elem *a, const struct hash_elem *b, void
 	return page_a->va < page_b->va;
 }
 
-static unsigned page_hash(const struct hash_elem *p_, void *aux UNUSED) {
+static uint64_t page_hash(const struct hash_elem *p_, void *aux UNUSED) {
 	const struct page *p = hash_entry(p_, struct page, hash_elem);
 	return hash_bytes(&p->va, sizeof p->va);
 }
@@ -234,4 +243,17 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+}
+
+/** 
+ * @brief Returns the page containing the given virtual address, or a null pointer if no such page exists. 
+ */
+struct page *
+page_lookup (struct supplemental_page_table *spt, const void *address) {
+  struct page p;
+  struct hash_elem *e;
+
+	p.va = (void *)address;
+  e = hash_find(&spt->page_map, &p.hash_elem);
+  return e != NULL ? hash_entry (e, struct page, hash_elem) : NULL;
 }
