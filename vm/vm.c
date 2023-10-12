@@ -144,8 +144,14 @@ vm_evict_frame (void) {
  * space.*/
 static struct frame *
 vm_get_frame (void) {
+	// NOTE - palloc_get_page()은 frame을 할당하고, 할당된 frame의 주소를 반환한다.
 	struct frame *frame = NULL;
-	/* TODO: Fill this function. */
+	frame = palloc_get_page(PAL_ZERO); // NOTE - shoud not zero when file backed memory
+	if (frame == NULL) {
+		// 빈 페이지가 없으면 evict 수행
+		frame = vm_evict_frame();
+	}
+	frame->kva = ptov(frame);
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -155,6 +161,8 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
+	// TODO - stack growth
+
 }
 
 /* Handle the fault on write_protected page */
@@ -170,10 +178,29 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 
-	page = spt_find_page(spt, addr);
+	if ((page = spt_find_page(spt, addr)) == NULL) {
+		// TODO - page fault가 발생한 주소가 spt에 없는 경우
+		return false;
+	}
+
 	// TODO stack growth, file-mapped의 경우 valid한 page를 만들어줘야 함
 	// TODO demand paging의 경우 valid한 page를 만들어줘야 함
+	
+	/* TODO copilot이 작성함 세부 검증이 반드시 필요하다!!! */
+	// check page's type is VM_ANON, and addr is below USER_STACK, do stack growth
+	if (page->operations->type == VM_ANON && addr < USER_STACK) {
+		vm_stack_growth(addr);
+		return true;
+	}
 
+	// check page's type is VM_FILE, frame is null then create new frame
+	if (page->operations->type == VM_FILE && page->frame == NULL) {
+		vm_do_claim_page(page);
+		return true;
+	}
+
+	// if page's type is uninit, BOOM
+	ASSERT (page->operations->type != VM_UNINIT);
 
 	/* TODO: Your code goes here */
 
@@ -192,6 +219,19 @@ vm_dealloc_page (struct page *page) {
 bool
 vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
+	uint64_t needed_page_entry = pg_round_down(va);
+	struct frame *f = vm_get_frame();
+
+	page = (struct page *)malloc(sizeof(struct page));
+	*page = (struct page) {
+		.va = va,
+		.frame = f,
+		.operations = NULL
+	};
+
+	struct supplemental_page_table *spt = &thread_current ()->spt;
+	spt_insert_page(spt, page);
+
 	/* TODO: Fill this function */
 
 	return vm_do_claim_page (page);
@@ -206,7 +246,8 @@ vm_do_claim_page (struct page *page) {
 	frame->page = page;
 	page->frame = frame;
 
-	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+	/* Insert page table entry to map page's VA to frame's PA. */
+	pml4_set_page(thread_current()->pml4, page->va, frame->kva, true);
 
 	return swap_in (page, frame->kva);
 }
