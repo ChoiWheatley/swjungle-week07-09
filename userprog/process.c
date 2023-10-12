@@ -806,6 +806,78 @@ static bool lazy_load_segment(struct page *page, void *aux) {
   t->running = file;
   file_deny_write(file);
 
+  /* Read and verify executable header. */
+  lock_acquire(inode_get_lock(file_get_inode(file)));
+  if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr ||
+      memcmp(ehdr.e_ident, "\177ELF\2\1\1", 7) || ehdr.e_type != 2 ||
+      ehdr.e_machine != 0x3E // amd64
+      || ehdr.e_version != 1 || ehdr.e_phentsize != sizeof(struct Phdr) ||
+      ehdr.e_phnum > 1024) {
+    lock_release(inode_get_lock(file_get_inode(file)));
+    printf("load: %s: error loading executable\n", file_name);
+  }
+  lock_release(inode_get_lock(file_get_inode(file)));
+
+  struct Phdr phdr;
+
+
+  // fill variables what i need
+  bool writable = (phdr.p_flags & PF_W) != 0;
+  uint64_t file_page = phdr.p_offset & ~PGMASK;
+  uint64_t mem_page = phdr.p_vaddr & ~PGMASK;
+  uint64_t page_offset = phdr.p_vaddr & PGMASK;
+  uint32_t read_bytes, zero_bytes;
+  if (phdr.p_filesz > 0) {
+    /* Normal segment.
+    * Read initial part from disk and zero the rest. */
+    read_bytes = page_offset + phdr.p_filesz;
+    zero_bytes =
+        (ROUND_UP(page_offset + phdr.p_memsz, PGSIZE) - read_bytes);
+  } else {
+    /* Entirely zero.
+    * Don't read anything from disk. */
+    read_bytes = 0;
+    zero_bytes = ROUND_UP(page_offset + phdr.p_memsz, PGSIZE);
+  }
+ 
+  file_seek(file, ofs);
+  while (read_bytes > 0 || zero_bytes > 0) {
+    /* Do calculate how to fill this page.
+     * We will read PAGE_READ_BYTES bytes from FILE
+     * and zero the final PAGE_ZERO_BYTES bytes. */
+    size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+    size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+    /* Get a page of memory. */
+    uint8_t *kpage = palloc_get_page(PAL_USER);
+    if (kpage == NULL)
+      return false;
+
+    /* Load this page. */
+    if (file_read(file, kpage, page_read_bytes) != (int)page_read_bytes) {
+      palloc_free_page(kpage);
+      return false;
+    }
+    memset(kpage + page_read_bytes, 0, page_zero_bytes);
+
+    /* Add the page to the process's address space. */
+    if (!install_page(upage, kpage, writable)) {
+      printf("fail\n");
+      palloc_free_page(kpage);
+      return false;
+    }
+
+    /* Advance. */
+    read_bytes -= page_read_bytes;
+    zero_bytes -= page_zero_bytes;
+    upage += PGSIZE;
+  }
+  return true;
+  
+  // TODO - read the segment from file to page
+
+
+
   // NOTE - check `load` from process.c
 
   // TODO - read program headers (ELF64_PHDR) from file
@@ -835,6 +907,27 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
   ASSERT(pg_ofs(upage) == 0);
   ASSERT(ofs % PGSIZE == 0);
 
+  struct hand_in {
+    struct file *file;
+    off_t ofs;
+    uint8_t *upage;
+    uint32_t read_bytes;
+    uint32_t zero_bytes;
+    bool writable;
+  } hand_in;
+
+  hand_in = (struct hand_in) {
+    .file = file,
+    .ofs = ofs,
+    .upage = upage,
+    .read_bytes = read_bytes,
+    .zero_bytes = zero_bytes,
+    .writable = writable
+  };
+
+  // hand_in struct for arguments
+  void *aux = (void *) &hand_in;
+
   while (read_bytes > 0 || zero_bytes > 0) {
     /* Do calculate how to fill this page.
      * We will read PAGE_READ_BYTES bytes from FILE
@@ -846,7 +939,6 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
      * Set up aux to pass information to the lazy_load_segment. 
      * NOTE - possibility of memory leak (file)
      */
-    void *aux = (void *)file;
     if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable,
                                         lazy_load_segment, aux))
       return false;
