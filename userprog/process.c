@@ -27,6 +27,15 @@
 #include "vm/vm.h"
 #endif
 
+static struct hand_in {
+  struct file *file;
+  off_t ofs;
+  uint8_t *upage;
+  uint32_t read_bytes;
+  uint32_t zero_bytes;
+  bool writable;
+};
+
 static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
@@ -794,52 +803,23 @@ static bool install_page(void *upage, void *kpage, bool writable) {
  */
 static bool lazy_load_segment(struct page *page, void *aux) {
   // cast to file from aux
-  struct file *file = (struct file *)aux;
   struct thread *t = thread_current();
-  struct ELF ehdr;
+  struct hand_in *hand_in = aux;
 
-  if (file == NULL) {
-    printf("file is null\n");
-    return false;
-  }
-
-  t->running = file;
-  file_deny_write(file);
-
-  /* Read and verify executable header. */
-  lock_acquire(inode_get_lock(file_get_inode(file)));
-  if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr ||
-      memcmp(ehdr.e_ident, "\177ELF\2\1\1", 7) || ehdr.e_type != 2 ||
-      ehdr.e_machine != 0x3E // amd64
-      || ehdr.e_version != 1 || ehdr.e_phentsize != sizeof(struct Phdr) ||
-      ehdr.e_phnum > 1024) {
-    lock_release(inode_get_lock(file_get_inode(file)));
-    printf("load: %s: error loading executable\n", file_name);
-  }
-  lock_release(inode_get_lock(file_get_inode(file)));
-
-  struct Phdr phdr;
+  // unpack hand_in struct pointer
+  struct file *file = hand_in->file;
+  off_t ofs = hand_in->ofs;
+  uint8_t *upage = hand_in->upage;
+  uint32_t read_bytes = hand_in->read_bytes;
+  uint32_t zero_bytes = hand_in->zero_bytes;
+  bool writable = hand_in->writable;
 
 
-  // fill variables what i need
-  bool writable = (phdr.p_flags & PF_W) != 0;
-  uint64_t file_page = phdr.p_offset & ~PGMASK;
-  uint64_t mem_page = phdr.p_vaddr & ~PGMASK;
-  uint64_t page_offset = phdr.p_vaddr & PGMASK;
-  uint32_t read_bytes, zero_bytes;
-  if (phdr.p_filesz > 0) {
-    /* Normal segment.
-    * Read initial part from disk and zero the rest. */
-    read_bytes = page_offset + phdr.p_filesz;
-    zero_bytes =
-        (ROUND_UP(page_offset + phdr.p_memsz, PGSIZE) - read_bytes);
-  } else {
-    /* Entirely zero.
-    * Don't read anything from disk. */
-    read_bytes = 0;
-    zero_bytes = ROUND_UP(page_offset + phdr.p_memsz, PGSIZE);
-  }
- 
+  /* copy of load_segment when USERPROG */
+  ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
+  ASSERT(pg_ofs(upage) == 0);
+  ASSERT(ofs % PGSIZE == 0);
+
   file_seek(file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) {
     /* Do calculate how to fill this page.
@@ -875,13 +855,9 @@ static bool lazy_load_segment(struct page *page, void *aux) {
   return true;
   
   // TODO - read the segment from file to page
-
-
-
   // NOTE - check `load` from process.c
 
   // TODO - read program headers (ELF64_PHDR) from file
-
   // TODO - on PT_LOAD, do load segment with offset, upage, read_bytes,
   // zero_bytes, writable
 }
@@ -907,16 +883,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
   ASSERT(pg_ofs(upage) == 0);
   ASSERT(ofs % PGSIZE == 0);
 
-  struct hand_in {
-    struct file *file;
-    off_t ofs;
-    uint8_t *upage;
-    uint32_t read_bytes;
-    uint32_t zero_bytes;
-    bool writable;
-  } hand_in;
-
-  hand_in = (struct hand_in) {
+  struct hand_in hand_in = (struct hand_in) {
     .file = file,
     .ofs = ofs,
     .upage = upage,
