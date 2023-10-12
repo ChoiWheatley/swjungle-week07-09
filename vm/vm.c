@@ -44,6 +44,7 @@ static uint64_t page_hash(const struct hash_elem *p_, void *aux UNUSED);
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
  * `vm_alloc_page`. */
+// lazy load 상태를 만들기 위해 사용.
 bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
                                     bool writable, vm_initializer *init,
                                     void *aux) {
@@ -162,7 +163,7 @@ vm_get_frame (void) {
 static void
 vm_stack_growth (void *addr UNUSED) {
 	// TODO - stack growth
-
+  vm_claim_page(addr);
 }
 
 /* Handle the fault on write_protected page */
@@ -171,40 +172,34 @@ vm_handle_wp (struct page *page UNUSED) {
 }
 
 /* Return true on success */
-bool
-vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
-		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
-	struct page *page = NULL;
-	/* TODO: Validate the fault */
+bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
+                         bool user UNUSED, bool write UNUSED,
+                         bool not_present UNUSED) {
+  struct supplemental_page_table *spt = &thread_current()->spt;
+  struct page *page = NULL;
+  /* Validate the fault */
+  /* Your code goes here */
 
-	if ((page = spt_find_page(spt, addr)) == NULL) {
-		// TODO - page fault가 발생한 주소가 spt에 없는 경우
-		return false;
-	}
+  // if page's type is uninit, BOOM
+  ASSERT(page->operations->type != VM_UNINIT);
 
-	// TODO stack growth, file-mapped의 경우 valid한 page를 만들어줘야 함
-	// TODO demand paging의 경우 valid한 page를 만들어줘야 함
-	
-	/* TODO copilot이 작성함 세부 검증이 반드시 필요하다!!! */
-	// check page's type is VM_ANON, and addr is below USER_STACK, do stack growth
-	if (page->operations->type == VM_ANON && addr < USER_STACK) {
-		vm_stack_growth(addr);
-		return true;
-	}
+  if ((page = spt_find_page(spt, addr)) != NULL && vm_do_claim_page(page)) {
+    // case 1. file-backed, case 2. swap-out
+    return true;
+  }
 
-	// check page's type is VM_FILE, frame is null then create new frame
-	if (page->operations->type == VM_FILE && page->frame == NULL) {
-		vm_do_claim_page(page);
-		return true;
-	}
+  /* 여기서부터는 page가 존재하지 않는 요청에 대해 처리 수행 */
+  if (page->operations->type == VM_ANON && addr < USER_STACK) {
+    // if pg round up (va) is exist, then stack growth
+    // NOTE - 한번에 4KB 이상의 스택을 달라고 하는 양심없는 유저는 걸리지 않는다...
+    if (spt_find_page(&spt->page_map, pg_round_up(addr)) != NULL) {
+      vm_stack_growth(addr);
+      return true;
+    }
+  }
 
-	// if page's type is uninit, BOOM
-	ASSERT (page->operations->type != VM_UNINIT);
-
-	/* TODO: Your code goes here */
-
-	return vm_do_claim_page (page);
+  return false;
+  // return vm_do_claim_page (page);
 }
 
 /* Free the page.
@@ -216,21 +211,23 @@ vm_dealloc_page (struct page *page) {
 }
 
 /* Claim the page that allocate on VA. */
+// 페이지만 추가로 생성하고, frame은 생성하지 않는다.
+// 페이지가 존재하지 않지만 줘야하는 경우 사용 ex) stack growth
+// claim을 건다. 내꺼야! 이 주소 내꺼야 줘! spt에 내 주소(페이지)를 추가해줘!
 bool
 vm_claim_page (void *va UNUSED) {
-	struct page *page = NULL;
-	uint64_t needed_page_entry = pg_round_down(va);
-	struct frame *f = vm_get_frame();
+	ASSERT (va != NULL);
 
+	struct page *page = NULL;
+	uint64_t need_pte = pg_round_down(va);
+
+	// 들어왔을 때 페이지가 없음을 전제로 한다.
 	page = (struct page *)malloc(sizeof(struct page));
 	*page = (struct page) {
-		.va = va,
-		.frame = f,
+		.va = need_pte,
+		.frame = NULL,
 		.operations = NULL
 	};
-
-	struct supplemental_page_table *spt = &thread_current ()->spt;
-	spt_insert_page(spt, page);
 
 	/* TODO: Fill this function */
 
@@ -238,13 +235,23 @@ vm_claim_page (void *va UNUSED) {
 }
 
 /* Claim the PAGE and set up the mmu. */
+// page를 전달받아 frame을 생성하고 매핑한다.
+// 페이지가 존재하면 frame을 할당해줄 목적으로 사용, claim을 처리해준다.
+// 아이구 고객님 고생이 많으셨겠어요 ^^ 처리해 드리겠습니다.
 static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
+	struct supplemental_page_table *spt = &thread_current ()->spt;
 
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
+
+	// NOTE - 페이지가 존재해도 되는 경우라면 삭제해도 무방함.
+	ASSERT (spt_find_page(spt, page->va) == NULL);
+
+	/* Insert page into spt */
+	spt_insert_page(spt, page);
 
 	/* Insert page table entry to map page's VA to frame's PA. */
 	pml4_set_page(thread_current()->pml4, page->va, frame->kva, true);
