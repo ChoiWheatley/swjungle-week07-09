@@ -273,6 +273,7 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt) {
 	lock_release (&pool->lock);
 	void *pages;
 	struct page *page = NULL;
+	struct frame *frame = NULL;
 	struct thread *cur = thread_current();
 
 	if (page_idx != BITMAP_ERROR)
@@ -292,12 +293,17 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt) {
 			if((page = (struct page *)malloc(sizeof(page))) == NULL) {
 				PANIC("malloc failed ☠️");
 			}
-			// page = (struct page){
-			// 	.va = pages,
-			// 	.
-			// };
+			if ((frame = (struct frame *)malloc(sizeof(frame))) == NULL) {
+				free(page);
+				PANIC("malloc failed ☠️");
+			}
+
+			*page = (struct page){ // init page structure
+				.va = pages,
+				.frame = frame,
+			};
 			// spt에 해당 페이지를 등록.
-			spt_insert_page(&cur->spt, );
+			spt_insert_page(&cur->spt, page);
 		}
 	} else {
 		if (flags & PAL_ASSERT)
