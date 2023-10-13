@@ -286,25 +286,6 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt) {
 		if (flags & PAL_ZERO) {
 			memset (pages, 0, PGSIZE * page_cnt);
 		}
-		if (flags & PAL_USER) {
-			// TODO - 물리메모리로 일대일 매핑이 되는 PTE를 PML4에 등록시켜준다.
-			// NOTE - kpage `pages`로부터 upage를 만드는 아래의 방식이 맞는지 의심이 된다.
-			pml4_set_page(cur->pml4, (void *)vtop(pages), pages, true);
-			if((page = (struct page *)malloc(sizeof(page))) == NULL) {
-				PANIC("malloc failed ☠️");
-			}
-			if ((frame = (struct frame *)malloc(sizeof(frame))) == NULL) {
-				free(page);
-				PANIC("malloc failed ☠️");
-			}
-
-			*page = (struct page){ // init page structure
-				.va = pages,
-				.frame = frame,
-			};
-			// spt에 해당 페이지를 등록.
-			spt_insert_page(&cur->spt, page);
-		}
 	} else {
 		if (flags & PAL_ASSERT)
 			PANIC ("palloc_get: out of pages");
