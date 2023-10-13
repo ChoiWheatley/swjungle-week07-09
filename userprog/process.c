@@ -816,40 +816,34 @@ static bool lazy_load_segment(struct page *page, void *aux) {
   uint32_t zero_bytes = hand_in->zero_bytes;
   bool writable = hand_in->writable;
 
-
   /* copy of load_segment when USERPROG */
   ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT(pg_ofs(upage) == 0);
   ASSERT(ofs % PGSIZE == 0);
 
   file_seek(file, ofs);
-  while (read_bytes > 0 || zero_bytes > 0) {
-    /* Do calculate how to fill this page.
-     * We will read PAGE_READ_BYTES bytes from FILE
-     * and zero the final PAGE_ZERO_BYTES bytes. */
-    size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-    size_t page_zero_bytes = PGSIZE - page_read_bytes;
+  /* Do calculate how to fill this page.
+    * We will read PAGE_READ_BYTES bytes from FILE
+    * and zero the final PAGE_ZERO_BYTES bytes. */
 
-    /* Get a page of memory. */
-    uint8_t *kpage = palloc_get_page(PAL_USER);
-    if (kpage == NULL)
-      return false;
+  /* Get a page of memory. */
+  uint8_t *kpage = page->frame->kva;
+  if (kpage == NULL)
+    return false;
 
-    /* Load this page. */
-    if (file_read(file, kpage, page_read_bytes) != (int)page_read_bytes) {
-      palloc_free_page(kpage);
-      return false;
-    }
-    memset(kpage + page_read_bytes, 0, page_zero_bytes);
-
-    /* Advance. */
-    read_bytes -= page_read_bytes;
-    zero_bytes -= page_zero_bytes;
-    upage += PGSIZE;
+  /* Load this page. */
+  if (file_read(file, kpage, read_bytes) != (int)read_bytes) {
+    return false;
   }
-  return true;
-  
+  memset(kpage + read_bytes, 0, zero_bytes);
+
   // NOTE - USERPROG 시절 load_segment를 복사함. 문제생기면 여기임.
+  ASSERT (page->va == upage);
+
+  // pml4_set_page(t->pml4, page->va, page->frame->kva, writable);
+  free(aux);
+
+  return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -873,17 +867,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
   ASSERT(pg_ofs(upage) == 0);
   ASSERT(ofs % PGSIZE == 0);
 
-  struct hand_in hand_in = (struct hand_in) {
-    .file = file,
-    .ofs = ofs,
-    .upage = upage,
-    .read_bytes = read_bytes,
-    .zero_bytes = zero_bytes,
-    .writable = writable
-  };
-
-  // hand_in struct for arguments
-  void *aux = (void *) &hand_in;
+  struct hand_in *hand_in;
 
   while (read_bytes > 0 || zero_bytes > 0) {
     /* Do calculate how to fill this page.
@@ -892,12 +876,22 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
     size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
+    hand_in = (struct hand_in *) malloc(sizeof(struct hand_in));
+    *hand_in = (struct hand_in) {
+      .file = file,
+      .ofs = ofs,
+      .upage = upage,
+      .read_bytes = page_read_bytes,
+      .zero_bytes = page_zero_bytes,
+      .writable = writable
+    };
+
     /** 
      * Set up aux to pass information to the lazy_load_segment. 
      * NOTE - possibility of memory leak (file)
      */
     if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable,
-                                        lazy_load_segment, aux))
+                                        lazy_load_segment, hand_in))
       return false;
 
     /* Advance. */
