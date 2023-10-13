@@ -49,41 +49,38 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
                                     bool writable, vm_initializer *init,
                                     void *aux) {
 
-	ASSERT(VM_TYPE(type) != VM_UNINIT)
-  ASSERT (init != NULL);
+  ASSERT(VM_TYPE(type) != VM_UNINIT)
+  ASSERT(init != NULL);
 
-	struct page *page = NULL;
-	struct supplemental_page_table *spt = &thread_current()->spt;
+  struct page *page = NULL;
+  struct supplemental_page_table *spt = &thread_current()->spt;
 
-	/* Check wheter the upage is already occupied or not. */
-	if ((page = spt_find_page(spt, upage)) == NULL) {
-			/* TODO: Create the struct page, fetch the initialier according to the VM type,
-			 * TODO: and then create "uninit" page struct by calling uninit_new. You
-			 * TODO: should modify the field after calling the uninit_new. */
-			page = (struct page *)malloc(sizeof(struct page));
-      void *initializer = NULL; 
-    
-      switch (type) {
-        case VM_ANON:
-          initializer = anon_initializer;
-          break;
-        case VM_FILE:
-          initializer = file_backed_initializer;
-          break;
-        default:
-          NOT_REACHED();
-      }
+  /* Check wheter the upage is already occupied or not. */
+  if ((page = spt_find_page(spt, upage)) == NULL) {
+    /* TODO: Create the struct page, fetch the initialier according to the VM
+     * type,
+     * TODO: and then create "uninit" page struct by calling uninit_new. You
+     * TODO: should modify the field after calling the uninit_new. */
+    page = (struct page *)malloc(sizeof(struct page));
+    void *initializer = NULL;
 
-			uninit_new(page, upage, init, type, aux, initializer);
-			
-			page->uninit = (struct uninit_page) {
-				.init = init,
-				.type = type,
-				.aux = aux
-			};
- 
-			/* Insert the page into the spt. */
-			spt_insert_page(spt, page);
+    switch (type) {
+    case VM_ANON:
+      initializer = anon_initializer;
+      break;
+    case VM_FILE:
+      initializer = file_backed_initializer;
+      break;
+    default:
+      NOT_REACHED();
+    }
+
+    uninit_new(page, upage, init, type, aux, initializer);
+
+    page->uninit = (struct uninit_page){.init = init, .type = type, .aux = aux};
+
+    /* Insert the page into the spt. */
+    spt_insert_page(spt, page);
   }
 }
 
@@ -186,7 +183,7 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
   /* Your code goes here */
 
   ASSERT (page->operations->type != VM_UNINIT); // if page's type is uninit, BOOM
-  ASSERT (is_user_vaddr(addr)); // if addr is not user vaddr, BOOM 
+  ASSERT (is_user_vaddr(addr)); // if addr is not user vad dr, BOOM 
 
   if ((page = spt_find_page(spt, addr)) != NULL && vm_do_claim_page(page)) {
     // case 1. file-backed, case 2. swap-out
