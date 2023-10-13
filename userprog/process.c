@@ -691,6 +691,14 @@ static bool validate_segment(const struct Phdr *phdr, struct file *file) {
   return true;
 }
 
+#ifndef VM
+/* Codes of this block will be ONLY USED DURING project 2.
+ * If you want to implement the function for whole project 2, implement it
+ * outside of #ifndef macro. */
+
+/* load() helpers. */
+static bool install_page(void *upage, void *kpage, bool writable);
+
 /* Adds a mapping from user virtual address UPAGE to kernel
  * virtual address KPAGE to the page table.
  * If WRITABLE is true, the user process may modify the page;
@@ -708,14 +716,6 @@ static bool install_page(void *upage, void *kpage, bool writable) {
   return (pml4_get_page(t->pml4, upage) == NULL &&
           pml4_set_page(t->pml4, upage, kpage, writable));
 }
-
-#ifndef VM
-/* Codes of this block will be ONLY USED DURING project 2.
- * If you want to implement the function for whole project 2, implement it
- * outside of #ifndef macro. */
-
-/* load() helpers. */
-static bool install_page(void *upage, void *kpage, bool writable);
 
 /* Loads a segment starting at offset OFS in FILE at address
  * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
@@ -842,13 +842,6 @@ static bool lazy_load_segment(struct page *page, void *aux) {
     }
     memset(kpage + page_read_bytes, 0, page_zero_bytes);
 
-    /* Add the page to the process's address space. */
-    if (!install_page(upage, kpage, writable)) {
-      printf("fail\n");
-      palloc_free_page(kpage);
-      return false;
-    }
-
     /* Advance. */
     read_bytes -= page_read_bytes;
     zero_bytes -= page_zero_bytes;
@@ -920,10 +913,14 @@ static bool setup_stack(struct intr_frame *if_) {
   bool success = false;
   void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 
-  /* TODO: Map the stack on stack_bottom and claim the page immediately.
-   * TODO: If success, set the rsp accordingly.
-   * TODO: You should mark the page is stack. */
-  /* TODO: Your code goes here */
+  if (vm_alloc_page_with_initializer(VM_ANON, stack_bottom, true, NULL, NULL)) {
+    /* Map the stack on stack_bottom and claim the page immediately.
+    * If success, set the rsp accordingly.
+    * You should mark the page is stack. */
+    if_->rsp = USER_STACK;
+    /* TODO: You should mark the page is stack. */
+    success = true;
+  }
 
   return success;
 }

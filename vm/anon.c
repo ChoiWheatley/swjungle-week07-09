@@ -2,6 +2,8 @@
 
 #include "vm/vm.h"
 #include "devices/disk.h"
+#include "threads/mmu.h"
+#include <stdio.h>
 
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk;
@@ -28,6 +30,7 @@ vm_anon_init (void) {
 bool
 anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
+	printf("[*] 왔니? (%s)\n", __FUNCTION__);
 	bool success = false;
 	struct anon_page *anon_page = &page->anon;
 

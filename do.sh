@@ -34,7 +34,7 @@ make clean
 make -j $(nproc --all)
 cd build
 # pintos-mkdisk filesys.dsk 10
-pintos --gdb --fs-disk=10 -p tests/userprog/args-single:args-single -- -q -f run 'args-single onearg'
+# pintos --gdb --fs-disk=10 -p tests/userprog/args-single:args-single -- -q -f run 'args-single onearg'
 # pintos --fs-disk filesys.dsk -p tests/userprog/args-single:args-single -- -f run 'args-single onearg'
 # pintos --fs-disk filesys.dsk -p tests/userprog/fork-once:fork-once --gdb -- -f run 'fork-once'
 # pintos --fs-disk=10 -p tests/userprog/read-normal:read-normal -p ../../tests/userprog/sample.txt:sample.txt -- -q -f run read-normal
@@ -42,3 +42,4 @@ pintos --gdb --fs-disk=10 -p tests/userprog/args-single:args-single -- -q -f run
 # pintos --gdb -v -k --fs-disk=10 -p tests/userprog/exec-once:exec-once -p tests/userprog/child-simple:child-simple -- -q   -f run exec-once
 # pintos --gdb -v -k --fs-disk=10 -p tests/userprog/exec-missing:exec-missing -- -q   -f run exec-missing
 # pintos --gdb -v -k --fs-disk=10 -p tests/userprog/read-zero:read-zero -p ../../tests/userprog/sample-text:sample-text -- -q -f run read-zero
+pintos $1 -v -k --fs-disk=10 -p tests/userprog/args-none:args-none --swap-disk=4 -- -q   -f run args-none
