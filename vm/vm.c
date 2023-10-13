@@ -50,6 +50,8 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
                                     void *aux) {
 
 	ASSERT(VM_TYPE(type) != VM_UNINIT)
+  ASSERT (init != NULL);
+
 	struct page *page = NULL;
 	struct supplemental_page_table *spt = &thread_current()->spt;
 
@@ -59,31 +61,30 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 			 * TODO: and then create "uninit" page struct by calling uninit_new. You
 			 * TODO: should modify the field after calling the uninit_new. */
 			page = (struct page *)malloc(sizeof(struct page));
-			uninit_new(page, upage, init, type, aux, NULL /* FIXME */);
+      void *initializer = NULL; 
+    
+      switch (type) {
+        case VM_ANON:
+          initializer = anon_initializer;
+          break;
+        case VM_FILE:
+          initializer = file_backed_initializer;
+          break;
+        default:
+          NOT_REACHED();
+      }
+
+			uninit_new(page, upage, init, type, aux, initializer);
 			
 			page->uninit = (struct uninit_page) {
 				.init = init,
 				.type = type,
 				.aux = aux
 			};
-
+ 
 			/* Insert the page into the spt. */
 			spt_insert_page(spt, page);
-	}
-
-	switch (type) {
-	case VM_ANON:
-			anon_initializer(page, type, page->frame->kva);
-			break;
-	case VM_FILE:
-			file_backed_initializer(page, type, page->frame->kva);
-			break;
-	default:
-			goto err;
-	}
-
-err:
-  return false;
+  }
 }
 
 /** 
@@ -163,6 +164,10 @@ vm_get_frame (void) {
 static void
 vm_stack_growth (void *addr UNUSED) {
 	// TODO - stack growth
+  if (!vm_alloc_page_with_initializer(VM_ANON, pg_round_down(addr), true, NULL, NULL)) {
+    PANIC ("VM: fail to allocate an struct page in stack growth.\n");
+  }
+
   vm_claim_page(addr);
 }
 
@@ -180,22 +185,22 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
   /* Validate the fault */
   /* Your code goes here */
 
-  // if page's type is uninit, BOOM
-  ASSERT(page->operations->type != VM_UNINIT);
+  ASSERT (page->operations->type != VM_UNINIT); // if page's type is uninit, BOOM
+  ASSERT (is_user_vaddr(addr)); // if addr is not user vaddr, BOOM 
 
   if ((page = spt_find_page(spt, addr)) != NULL && vm_do_claim_page(page)) {
     // case 1. file-backed, case 2. swap-out
     return true;
   }
 
-  /* 여기서부터는 page가 존재하지 않는 요청에 대해 처리 수행 */
-  if (page->operations->type == VM_ANON && addr < USER_STACK) {
+  /* 여기서부터는 page가 존재하지 않는 요청에 대해 처리 수행 - 명시적인 할당 요청이 없었음 */
+  
+  if (addr < USER_STACK && spt_find_page(&spt->page_map, pg_round_up(addr)) != NULL) {
+    // TODO 명확한 조건을 추가해야 한다.
     // if pg round up (va) is exist, then stack growth
     // NOTE - 한번에 4KB 이상의 스택을 달라고 하는 양심없는 유저는 걸리지 않는다...
-    if (spt_find_page(&spt->page_map, pg_round_up(addr)) != NULL) {
-      vm_stack_growth(addr);
-      return true;
-    }
+    vm_stack_growth(addr);
+    return true;
   }
 
   return false;
@@ -221,6 +226,9 @@ vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
 	uint64_t need_pte = pg_round_down(va);
 
+  // TODO 
+  vm_alloc_page_with_initializer(VM_ANON, need_pte, true, NULL, NULL);
+
 	// 들어왔을 때 페이지가 없음을 전제로 한다.
 	page = (struct page *)malloc(sizeof(struct page));
 	*page = (struct page) {
@@ -234,10 +242,13 @@ vm_claim_page (void *va UNUSED) {
 	return vm_do_claim_page (page);
 }
 
-/* Claim the PAGE and set up the mmu. */
-// page를 전달받아 frame을 생성하고 매핑한다.
-// 페이지가 존재하면 frame을 할당해줄 목적으로 사용, claim을 처리해준다.
-// 아이구 고객님 고생이 많으셨겠어요 ^^ 처리해 드리겠습니다.
+/** 
+ * Claim the PAGE and set up the mmu. 
+ * page를 전달받아 frame을 생성하고 매핑한다.
+ * 페이지가 존재하면 frame을 할당해줄 목적으로 사용, claim을 처리해준다.
+ * 아이구 고객님 고생이 많으셨겠어요 ^^ 처리해 드리겠습니다.
+ * pml4 - kva 연결 작업은 operation 에서 한다.
+ */
 static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
@@ -247,14 +258,10 @@ vm_do_claim_page (struct page *page) {
 	frame->page = page;
 	page->frame = frame;
 
-	// NOTE - 페이지가 존재해도 되는 경우라면 삭제해도 무방함.
-	ASSERT (spt_find_page(spt, page->va) == NULL);
-
-	/* Insert page into spt */
-	spt_insert_page(spt, page);
-
-	/* Insert page table entry to map page's VA to frame's PA. */
-	pml4_set_page(thread_current()->pml4, page->va, frame->kva, true);
+  // anonymous 는 0으로 채워줘야 한다.
+  if (page->operations->type == VM_ANON) {
+    memset(frame->kva, 0, PGSIZE);
+  }
 
 	return swap_in (page, frame->kva);
 }

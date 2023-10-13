@@ -29,10 +29,15 @@ bool
 anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
 	bool success = false;
-	page->operations = &anon_ops;
-
 	struct anon_page *anon_page = &page->anon;
+
+	ASSERT (type == VM_ANON);
+
 	// TODO - do something with kva
+
+	page->operations = &anon_ops;
+	page->va = NULL;
+	page->frame = kva;
 	
 	return success;
 }
@@ -41,6 +46,9 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 static bool
 anon_swap_in (struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
+
+	// thread_current의 pml4에 할당	
+	pml4_set_page(thread_current()->pml4, page->va, kva, true);
 }
 
 /* Swap out the page by writing contents to the swap disk. */
