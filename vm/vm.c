@@ -52,9 +52,10 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
   ASSERT(VM_TYPE(type) != VM_UNINIT)
   // ASSERT(init != NULL);
 
-  struct page *page = NULL;
-	void *upage_entry = pg_round_down(upage);
   struct supplemental_page_table *spt = &thread_current()->spt;
+  struct page *page = NULL;
+  void *upage_entry = pg_round_down(upage);
+  void *initializer = NULL;
 
   /* Check wheter the upage is already occupied or not. */
   if ((page = spt_find_page(spt, upage_entry)) == NULL) {
@@ -63,7 +64,6 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
      * TODO: and then create "uninit" page struct by calling uninit_new. You
      * TODO: should modify the field after calling the uninit_new. */
     page = (struct page *)malloc(sizeof(struct page));
-    void *initializer = NULL;
 
     switch (type) {
     case VM_ANON:
@@ -76,6 +76,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
       NOT_REACHED();
     }
 
+    ASSERT (initializer != NULL);
     uninit_new(page, upage_entry, init, type, aux, initializer);
 
     /* Insert the page into the spt. */
@@ -150,7 +151,7 @@ vm_get_frame (void) {
 		// 빈 페이지가 없으면 evict 수행
 		frame = vm_evict_frame();
 	} else {
-		frame = palloc_get_page(0); // FIXME - 임시로 palloc함
+		frame = palloc_get_page(PAL_ZERO); // FIXME - 임시로 palloc함
 		frame->kva = kva;
 	}
 
@@ -188,19 +189,22 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
   // ASSERT (page->operations->type != VM_UNINIT); // if page's type is uninit, BOOM
   ASSERT (is_user_vaddr(addr)); // if addr is not user vad dr, BOOM 
 
-  if ((page = spt_find_page(spt, upage_entry)) != NULL && vm_do_claim_page(page)) {
+  if ((page = spt_find_page(spt, upage_entry)) != NULL) {
     // case 1. file-backed, case 2. swap-out
-    return true;
+    if (vm_do_claim_page(page)) {
+      return true;
+    }
   }
+  else {
+  	/* 여기서부터는 page가 존재하지 않는 요청에 대해 처리 수행 - 명시적인 할당 요청이 없었음 */
 
-  /* 여기서부터는 page가 존재하지 않는 요청에 대해 처리 수행 - 명시적인 할당 요청이 없었음 */
-  
-  if (upage_entry < USER_STACK && spt_find_page(&spt->page_map, upage_entry) != NULL) {
-    // TODO 명확한 조건을 추가해야 한다.
-    // if pg round up (va) is exist, then stack growth
-    // NOTE - 한번에 4KB 이상의 스택을 달라고 하는 양심없는 유저는 걸리지 않는다...
-    vm_stack_growth(upage_entry);
-    return true;
+	if (upage_entry < USER_STACK) {
+		// TODO 명확한 조건을 추가해야 한다.
+		// if pg round up (va) is exist, then stack growth
+		// NOTE - 한번에 4KB 이상의 스택을 달라고 하는 양심없는 유저는 걸리지 않는다...
+		vm_stack_growth(upage_entry);
+		return true;
+	}
   }
 
   return false;
@@ -224,18 +228,10 @@ vm_claim_page (void *va UNUSED) {
 	ASSERT (va != NULL);
 
 	struct page *page = NULL;
-	void *need_pte = pg_round_down(va);
+	void *upage_entry = pg_round_down(va);
 
   // TODO 
-  vm_alloc_page_with_initializer(VM_ANON, need_pte, true, NULL, NULL);
-
-	// 들어왔을 때 페이지가 없음을 전제로 한다.
-	page = (struct page *)malloc(sizeof(struct page));
-	*page = (struct page) {
-		.va = need_pte,
-		.frame = NULL,
-		.operations = NULL
-	};
+  vm_alloc_page_with_initializer(VM_ANON, upage_entry, true, NULL, NULL);
 
 	/* TODO: Fill this function */
 

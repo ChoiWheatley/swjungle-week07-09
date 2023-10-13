@@ -247,9 +247,7 @@ int process_exec(void *f_name) {
   char *file_name = f_name;
   bool success;
   int i;
-  char *argv[128] = {
-      0,
-  };
+  char **argv = (char *)malloc (sizeof(char) * 128);
   char *token, *save_ptr; // token화 하기 위한 변수
   int argc = 0;  // argument 개수
 
@@ -828,8 +826,7 @@ static bool lazy_load_segment(struct page *page, void *aux) {
 
   /* Get a page of memory. */
   uint8_t *kpage = page->frame->kva;
-  if (kpage == NULL)
-    return false;
+  ASSERT (kpage != NULL);
 
   /* Load this page. */
   if (file_read(file, kpage, read_bytes) != (int)read_bytes) {
@@ -902,12 +899,16 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
   return true;
 }
 
+static void pml4_setter(struct page *page, void *aux) {
+  pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, true);
+}
+
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */
 static bool setup_stack(struct intr_frame *if_) {
   bool success = false;
   void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 
-  if (vm_alloc_page_with_initializer(VM_ANON, stack_bottom, true, NULL, NULL)) {
+  if (vm_alloc_page_with_initializer(VM_ANON, stack_bottom, true, pml4_setter, NULL)) {
     /* Map the stack on stack_bottom and claim the page immediately.
     * If success, set the rsp accordingly.
     * You should mark the page is stack. */
