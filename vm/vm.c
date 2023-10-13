@@ -190,7 +190,7 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
   ASSERT (is_user_vaddr(addr)); // if addr is not user vad dr, BOOM 
 
   if ((page = spt_find_page(spt, upage_entry)) != NULL) {
-    // case 1. file-backed, case 2. swap-out
+    // case 1. file-backed, case 2. swap-out, case 3. first stack
     if (vm_do_claim_page(page)) {
       return true;
     }
@@ -198,13 +198,13 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
   else {
   	/* 여기서부터는 page가 존재하지 않는 요청에 대해 처리 수행 - 명시적인 할당 요청이 없었음 */
 
-	if (upage_entry < USER_STACK) {
-		// TODO 명확한 조건을 추가해야 한다.
-		// if pg round up (va) is exist, then stack growth
-		// NOTE - 한번에 4KB 이상의 스택을 달라고 하는 양심없는 유저는 걸리지 않는다...
-		vm_stack_growth(upage_entry);
-		return true;
-	}
+    if (upage_entry < USER_STACK) {
+      // TODO 명확한 조건을 추가해야 한다.
+      // if pg round up (va) is exist, then stack growth
+      // NOTE - 한번에 4KB 이상의 스택을 달라고 하는 양심없는 유저는 걸리지 않는다...
+      vm_stack_growth(upage_entry);
+      return true;
+    }
   }
 
   return false;
