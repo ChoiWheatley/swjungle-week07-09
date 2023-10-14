@@ -898,8 +898,6 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 }
 
 bool pml4_setter(struct page *page, void *aux) {
-  printf("[*] current thread: %s, va: %p, kva: %p (%s)\n",
-         thread_current()->name, page->va, page->frame->kva, __FUNCTION__);
   return pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, true);
 }
 

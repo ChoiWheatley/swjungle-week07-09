@@ -27,20 +27,20 @@ vm_anon_init (void) {
 }
 
 /* Initialize the file mapping */
-bool
-anon_initializer (struct page *page, enum vm_type type, void *kva) {
-	/* Set up the handler */
-	printf("[*] 왔니? (%s)\n", __FUNCTION__);
+bool anon_initializer(struct page *page, enum vm_type type, void *kva) {
+  /* Set up the handler */
 	bool success = false;
-	struct anon_page *anon_page = &page->anon;
+  // FIXME 현재 page는 uninit_page로 초기화된 상태. 이걸 anon_page로 캐스팅 해도
+  // 되나?
+  struct anon_page *anon_page = &page->anon; 
 
 	ASSERT (type == VM_ANON);
 
 	// TODO - do something with kva
 
 	page->operations = &anon_ops;
-	page->frame->kva = kva;
-	page->anon = *anon_page;
+	// page->frame->kva = kva;
+	page->anon = *anon_page; // FIXME 위의 FIXME에서 이어짐.
 	
 	ASSERT (page == page->frame->page);
 	success = true;
