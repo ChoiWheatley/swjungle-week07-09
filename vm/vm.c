@@ -49,14 +49,13 @@ static uint64_t page_hash(const struct hash_elem *p_, void *aux UNUSED);
 bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
                                     bool writable, vm_initializer *init,
                                     void *aux) {
-
-  ASSERT(VM_TYPE(type) != VM_UNINIT)
-  // ASSERT(init != NULL);
-
   struct supplemental_page_table *spt = &thread_current()->spt;
   struct page *page = NULL;
   void *upage_entry = pg_round_down(upage);
   void *initializer = NULL;
+
+  ASSERT (VM_TYPE(type) != VM_UNINIT)
+  ASSERT (is_user_vaddr (upage));
 
   /* Check wheter the upage is already occupied or not. */
   if ((page = spt_find_page(spt, upage_entry)) == NULL) {
@@ -64,7 +63,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
      * type,
      * TODO: and then create "uninit" page struct by calling uninit_new. You
      * TODO: should modify the field after calling the uninit_new. */
-    page = (struct page *)malloc(sizeof(struct page));
+    page = (struct page *)calloc(1, sizeof(struct page));
 
     switch (type) {
     case VM_ANON:
@@ -90,6 +89,8 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 */
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
+  ASSERT (pg_ofs(va) == 0);
+  
 	struct page *page = page_lookup(spt, va);
 	return page;
 }
@@ -135,7 +136,8 @@ vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
 	/* TODO: swap out the victim and return the evicted frame. */
 
-	return NULL;
+  ASSERT(victim != NULL);
+	return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -144,17 +146,16 @@ vm_evict_frame (void) {
  * space.*/
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = NULL;
-	// NOTE - palloc_get_page()은 frame을 할당하고, 할당된 frame의 주소를 반환한다.
-	void *kva = palloc_get_page(PAL_USER); // NOTE - shoud not zero when file backed memory
-
+  // 반환된 주소가 0으로 초기화 되어있다는 보장은 없다.
+	void *kva = palloc_get_page(PAL_USER); // kva - kernel virtual address
 	if (kva == NULL) {
 		// 빈 페이지가 없으면 evict 수행
-		frame = vm_evict_frame();
-	} else {
-		frame = palloc_get_page(PAL_ZERO); // FIXME - 임시로 palloc함
-		frame->kva = kva;
+		return vm_evict_frame();
 	}
+  
+  struct frame *frame = malloc(sizeof(struct frame));
+  frame->kva = kva;
+  frame->page = NULL;
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -184,11 +185,9 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
   struct supplemental_page_table *spt = &thread_current()->spt;
   struct page *page = NULL;
 	void *upage_entry = pg_round_down(addr);
-  /* Validate the fault */
-  /* Your code goes here */
 
-  // ASSERT (page->operations->type != VM_UNINIT); // if page's type is uninit, BOOM
-  ASSERT (is_user_vaddr(addr)); // if addr is not user vad dr, BOOM 
+  /* Validate the fault */
+  ASSERT (is_user_vaddr(addr)); // if page's type is uninit, BOOM
 
   if ((page = spt_find_page(spt, upage_entry)) != NULL) {
     // case 1. file-backed, case 2. swap-out, case 3. first stack
@@ -197,7 +196,6 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
     }
   } else {
   	/* 여기서부터는 page가 존재하지 않는 요청에 대해 처리 수행 - 명시적인 할당 요청이 없었음 */
-
     if (upage_entry < USER_STACK) {
       // TODO 명확한 조건을 추가해야 한다.
       // if pg round up (va) is exist, then stack growth
@@ -227,16 +225,14 @@ vm_dealloc_page (struct page *page) {
 bool
 vm_claim_page (void *va UNUSED) {
 	ASSERT (va != NULL);
+  ASSERT (pg_ofs(va) == 0);
 
-	struct page *page = NULL;
-	void *upage_entry = pg_round_down(va);
-
-  // TODO 
-  vm_alloc_page_with_initializer(VM_ANON, upage_entry, true, NULL, NULL);
-
-	/* TODO: Fill this function */
-
-	return vm_do_claim_page (page);
+  if (vm_alloc_page_with_initializer(VM_ANON, va, true, pml4_setter, NULL)) {
+    struct page *page = page_lookup(&thread_current()->spt, va);
+	  return vm_do_claim_page (page);
+  }
+  
+  return false;
 }
 
 /** 
@@ -249,14 +245,14 @@ vm_claim_page (void *va UNUSED) {
 static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
-	struct supplemental_page_table *spt = &thread_current ()->spt;
+  ASSERT (frame != NULL);
 
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
 
   // anonymous 는 0으로 채워줘야 한다.
-  if (page->operations->type == VM_ANON) {
+  if (page_get_type(page) == VM_ANON) {
     memset(frame->kva, 0, PGSIZE);
   }
 
