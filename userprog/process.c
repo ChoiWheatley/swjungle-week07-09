@@ -73,7 +73,6 @@ tid_t process_create_initd(const char *file_name) {
 
 /* A thread function that launches first user process. */
 static void initd(void *f_name) {
-  printf("[*] 왔니? %p\n", f_name);
 #ifdef VM
   supplemental_page_table_init(&thread_current()->spt);
 #endif
@@ -899,8 +898,10 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
   return true;
 }
 
-static void pml4_setter(struct page *page, void *aux) {
-  pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, true);
+bool pml4_setter(struct page *page, void *aux) {
+  printf("[*] current thread: %s, va: %p, kva: %p (%s)\n",
+         thread_current()->name, page->va, page->frame->kva, __FUNCTION__);
+  return pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, true);
 }
 
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */

@@ -5,6 +5,7 @@
 #include "vm/inspect.h"
 #include "threads/pte.h"
 #include "vm/file.h"
+#include "userprog/process.h"
 #include <stdio.h>
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
@@ -164,7 +165,7 @@ vm_get_frame (void) {
 static void
 vm_stack_growth (void *addr UNUSED) {
 	// TODO - stack growth
-  if (!vm_alloc_page_with_initializer(VM_ANON, pg_round_down(addr), true, NULL, NULL)) {
+  if (!vm_alloc_page_with_initializer(VM_ANON, pg_round_down(addr), true, pml4_setter, NULL)) {
     PANIC ("VM: fail to allocate an struct page in stack growth.\n");
   }
 
@@ -194,14 +195,14 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
     if (vm_do_claim_page(page)) {
       return true;
     }
-  }
-  else {
+  } else {
   	/* 여기서부터는 page가 존재하지 않는 요청에 대해 처리 수행 - 명시적인 할당 요청이 없었음 */
 
     if (upage_entry < USER_STACK) {
       // TODO 명확한 조건을 추가해야 한다.
       // if pg round up (va) is exist, then stack growth
       // NOTE - 한번에 4KB 이상의 스택을 달라고 하는 양심없는 유저는 걸리지 않는다...
+			printf("[*] vm_try_handle_fault: stack growth\n");
       vm_stack_growth(upage_entry);
       return true;
     }

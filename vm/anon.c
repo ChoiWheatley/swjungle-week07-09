@@ -30,7 +30,7 @@ vm_anon_init (void) {
 bool
 anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
-	// printf("[*] 왔니? (%s)\n", __FUNCTION__);
+	printf("[*] 왔니? (%s)\n", __FUNCTION__);
 	bool success = false;
 	struct anon_page *anon_page = &page->anon;
 
@@ -40,6 +40,7 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 
 	page->operations = &anon_ops;
 	page->frame->kva = kva;
+	page->anon = *anon_page;
 	
 	ASSERT (page == page->frame->page);
 	success = true;
