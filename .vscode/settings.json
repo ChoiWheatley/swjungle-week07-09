@@ -12,7 +12,8 @@
     //     "utility": "c"
     // },
     "C_Cpp.default.defines": [
-        "USERPROG"
+        "USERPROG",
+        "VM"
     ],
     "C_Cpp.default.compilerPath": "/usr/bin/gcc-11",
     "files.associations": {
