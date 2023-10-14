@@ -801,6 +801,8 @@ static bool setup_stack(struct intr_frame *if_) {
  * @param aux file pointer that contains loadable object
  */
 static bool lazy_load_segment(struct page *page, void *aux) {
+  // NOTE - USERPROG 시절 load_segment를 복사함. 문제생기면 여기임.
+
   // cast to file from aux
   struct thread *t = thread_current();
   struct hand_in *hand_in = aux;
@@ -813,32 +815,27 @@ static bool lazy_load_segment(struct page *page, void *aux) {
   uint32_t zero_bytes = hand_in->zero_bytes;
   bool writable = hand_in->writable;
 
+  // code segment registration
+  pml4_set_page(t->pml4, page->va, page->frame->kva, writable);
+
   /* copy of load_segment when USERPROG */
   ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT(pg_ofs(upage) == 0);
   ASSERT(ofs % PGSIZE == 0);
+  ASSERT (page->va == upage);
 
   file_seek(file, ofs);
   /* Do calculate how to fill this page.
     * We will read PAGE_READ_BYTES bytes from FILE
     * and zero the final PAGE_ZERO_BYTES bytes. */
 
-  /* Get a page of memory. */
-  uint8_t *kpage = page->frame->kva;
-  ASSERT (kpage != NULL);
-
   /* Load this page. */
-  if (file_read(file, kpage, read_bytes) != (int)read_bytes) {
+  if (file_read(file, upage, read_bytes) != (int)read_bytes) {
     return false;
   }
-  memset(kpage + read_bytes, 0, zero_bytes);
+  memset(upage + read_bytes, 0, zero_bytes);
 
-  // NOTE - USERPROG 시절 load_segment를 복사함. 문제생기면 여기임.
-  ASSERT (page->va == upage);
-
-  // code segment registration
-  pml4_set_page(t->pml4, page->va, page->frame->kva, writable);
-  free(aux);
+  free(aux); // 인자 (malloc) free 수행
 
   return true;
 }
@@ -864,7 +861,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
   ASSERT(pg_ofs(upage) == 0);
   ASSERT(ofs % PGSIZE == 0);
 
-  struct hand_in *hand_in;
+  struct hand_in *hand_in = NULL;
 
   while (read_bytes > 0 || zero_bytes > 0) {
     /* Do calculate how to fill this page.
@@ -876,7 +873,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
     hand_in = (struct hand_in *) malloc(sizeof(struct hand_in));
     *hand_in = (struct hand_in) {
       .file = file,
-      .ofs = page_read_bytes + ofs,
+      .ofs = ofs,
       .upage = upage,
       .read_bytes = page_read_bytes,
       .zero_bytes = page_zero_bytes,
@@ -892,10 +889,10 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
       return false;
 
     /* Advance. */
+    ofs += PGSIZE;
+    upage += PGSIZE;
     read_bytes -= page_read_bytes;
     zero_bytes -= page_zero_bytes;
-    ofs += page_read_bytes;
-    upage += PGSIZE;
   }
   return true;
 }
