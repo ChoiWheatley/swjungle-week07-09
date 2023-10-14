@@ -200,7 +200,6 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
       // TODO 명확한 조건을 추가해야 한다.
       // if pg round up (va) is exist, then stack growth
       // NOTE - 한번에 4KB 이상의 스택을 달라고 하는 양심없는 유저는 걸리지 않는다...
-			printf("[*] vm_try_handle_fault: stack growth\n");
       vm_stack_growth(upage_entry);
       return true;
     }
