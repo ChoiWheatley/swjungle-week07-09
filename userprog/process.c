@@ -836,7 +836,8 @@ static bool lazy_load_segment(struct page *page, void *aux) {
   // NOTE - USERPROG 시절 load_segment를 복사함. 문제생기면 여기임.
   ASSERT (page->va == upage);
 
-  // pml4_set_page(t->pml4, page->va, page->frame->kva, writable);
+  // code segment registration
+  pml4_set_page(t->pml4, page->va, page->frame->kva, writable);
   free(aux);
 
   return true;
@@ -875,7 +876,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
     hand_in = (struct hand_in *) malloc(sizeof(struct hand_in));
     *hand_in = (struct hand_in) {
       .file = file,
-      .ofs = ofs,
+      .ofs = page_read_bytes + ofs,
       .upage = upage,
       .read_bytes = page_read_bytes,
       .zero_bytes = page_zero_bytes,
@@ -893,6 +894,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
     /* Advance. */
     read_bytes -= page_read_bytes;
     zero_bytes -= page_zero_bytes;
+    ofs += page_read_bytes;
     upage += PGSIZE;
   }
   return true;
