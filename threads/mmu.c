@@ -233,7 +233,7 @@ pml4_get_page (uint64_t *pml4, const void *uaddr) {
  * 
  * @param pml4 스레드의 pml4 멤버
  * @param upage 유저 페이지 시작주소
- * @param kpage ??????
+ * @param kpage 커널 페이지 가상주소, 물리주소와 1:1 매칭
  * @param rw 읽기/쓰기 옵션
  */
 bool

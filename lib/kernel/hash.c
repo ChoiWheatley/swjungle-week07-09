@@ -292,7 +292,6 @@ find_elem (struct hash *h, struct list *bucket, struct hash_elem *e) {
 	for (i = list_begin (bucket); i != list_end (bucket); i = list_next (i)) {
 		struct hash_elem *hi = list_elem_to_hash_elem (i);
 		if (!h->less (hi, e, h->aux) && !h->less (e, hi, h->aux))
-			// hi == e
 			return hi;
 	}
 	return NULL;
