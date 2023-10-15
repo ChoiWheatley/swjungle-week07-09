@@ -46,6 +46,8 @@ struct page {
 	void *va;              /* user space: start virtual address of page */
 	struct frame *frame;   /* Back reference for frame */
 
+	bool writable;		 /* Writable or not. If writable, can be modified
+	                          * and saved to the file. */
 	/* Your implementation */
 
 	struct hash_elem hash_elem; // hash element for supplemental page table

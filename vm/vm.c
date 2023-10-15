@@ -64,6 +64,11 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
      * TODO: and then create "uninit" page struct by calling uninit_new. You
      * TODO: should modify the field after calling the uninit_new. */
     page = (struct page *)calloc(1, sizeof(struct page));
+    if (page == NULL) {
+      return false;
+    }
+
+    page->writable = writable;
 
     switch (type) {
     case VM_ANON:
@@ -83,6 +88,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
     spt_insert_page(spt, page);
   }
 
+  // spt에 page가 존재하면 true를 반환한다.
   return true;
 }
 
@@ -282,9 +288,28 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 }
 
 /* Copy supplemental page table from src to dst */
-bool
-supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
-		struct supplemental_page_table *src UNUSED) {
+bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
+                                  struct supplemental_page_table *src UNUSED) {
+  struct hash_iterator i;
+  struct page *p, *dup_p;
+
+  hash_first(&i, &src->page_map);
+  while (hash_next(&i)) {
+    p = hash_entry(hash_cur(&i), struct page, hash_elem);
+    dup_p = (struct page *)calloc(1, sizeof(struct page));
+    memcpy(dup_p, p, sizeof(struct page));
+
+    // 부모 페이지에 frame이 이미 할당되어 있으면 (fault 가 이미 발생했으면) frame 내용을 복사
+    if (p->frame != NULL) {
+      vm_do_claim_page(dup_p);
+      memcpy(dup_p->frame->kva, p->frame->kva, PGSIZE);
+    }
+
+    hash_insert(&dst->page_map, &dup_p->hash_elem);
+  }
+
+  ASSERT(hash_size(&dst->page_map) == hash_size(&src->page_map));
+  return true;
 }
 
 /* Free the resource hold by the supplemental page table */
