@@ -229,6 +229,9 @@ static void __do_fork(void *aux) {
   if_.R.rax = 0;
   process_init();
 
+  // NOTE - 부모가 실행하는 파일도 복사해서 활용해야 한다. -> COW에서 수정 필요.
+  current->running = file_duplicate(parent->running);
+
   /* Finally, switch to the newly created process. */
   sema_up(&current->fork_sema);
   if (succ)
@@ -813,6 +816,12 @@ static bool lazy_load_segment(struct page *page, void *aux) {
   uint32_t read_bytes = hand_in->read_bytes;
   uint32_t zero_bytes = hand_in->zero_bytes;
   bool writable = hand_in->writable;
+
+  // fork한 child program은 running을 사용해야 한다.
+  if (file != t->running) {
+    file = t->running;
+  }
+  ASSERT (file != NULL);
 
   // code segment registration
   pml4_set_page(t->pml4, page->va, page->frame->kva, writable);
