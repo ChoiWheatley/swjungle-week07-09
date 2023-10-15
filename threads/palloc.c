@@ -11,6 +11,9 @@
 #include "threads/loader.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
+#include "threads/thread.h"
+#include "threads/mmu.h"
 
 /* Page allocator.  Hands out memory in page-size (or
    page-multiple) chunks.  See malloc.h for an allocator that
@@ -53,7 +56,9 @@ struct multiboot_info {
 	uint32_t mmap_base;
 };
 
-/* e820 entry */
+/** 
+ * @brief e820 entry. BIOS가 DRAM으로부터 가용용량 등의 정보를 받아온다.
+ **/
 struct e820_entry {
 	uint32_t size;
 	uint32_t mem_lo;
@@ -274,8 +279,9 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt) {
 		pages = NULL;
 
 	if (pages) {
-		if (flags & PAL_ZERO)
+		if (flags & PAL_ZERO) {
 			memset (pages, 0, PGSIZE * page_cnt);
+		}
 	} else {
 		if (flags & PAL_ASSERT)
 			PANIC ("palloc_get: out of pages");
