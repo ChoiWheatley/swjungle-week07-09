@@ -20,6 +20,7 @@
 #include "filesys/file.h"
 #include "filesys/inode.h"
 #include "devices/input.h"
+#include "vm/vm.h"
 
 /* System call.
  *
@@ -72,9 +73,15 @@ int dup2(int oldfd, int newfd);
  * @note 해당 함수는 유저 프로그램을 종료시켜줍니다.
  */
 void check_address(const void *uaddr) {
-  if (is_kernel_vaddr(uaddr) || pml4_get_page(thread_current()->pml4, uaddr) == NULL) {
-		exit(-1);
-  } 
+  // if (is_kernel_vaddr(uaddr) || pml4_get_page(thread_current()->pml4, uaddr) == NULL) {
+	// 	exit(-1);
+  // } 
+  
+  if (is_kernel_vaddr(uaddr) 
+      || pml4_get_page(thread_current()->pml4, uaddr) == NULL
+      && spt_find_page(&thread_current()->spt, pg_round_down(uaddr)) == NULL) {
+    exit(-1);
+  }
 }
 
 void syscall_init(void) {
@@ -137,7 +144,7 @@ void syscall_handler(struct intr_frame *f UNUSED) {
       close(f->R.rdi);
       break;
     default:
-      printf("system call!\n");
+      // printf("system call!\n");
       thread_exit();
   }
 }
