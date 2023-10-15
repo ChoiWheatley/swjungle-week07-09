@@ -64,6 +64,10 @@ C 코드 포매팅 (`C_Cpp.clang_format_style`)은 LLVM을 사용합니다. 일�
 }
 ```
 
+uninit.h 와 vm.h의 경우 각각 ifndef 구문으로 한번만 정의하도록 제한하고 있지만 내부적으로 include 헤더 위치에 따라서 순환문제가 발생합니다. 이 두 파일에 대해서는 전체 formatting을 수행하지 않아야 합니다.
+
+formatting이 필요한 경우 일부 영역만 포매팅을 적용하는 "Format Selection"을 사용하도록 합니다.
+
 [Doxygen Documentation Generator](https://marketplace.visualstudio.com/items?itemName=cschlosser.doxdocgen)를 사용하여 기존에 `///` 또는 `/***/`을 사용한 docstring 자동생성에 더 많은 기능과 자동완성을 제공해 줄 수 있습니다.
 
 [Markdown Lint](https://marketplace.visualstudio.com/items?itemName=DavidAnson.vscode-markdownlint)는 md파일을 작성할 때 파일 깨지는 현상을 사전에 방지해 줄 수 있습니다.
