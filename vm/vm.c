@@ -204,10 +204,9 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
     }
   } else {
   	/* 여기서부터는 page가 존재하지 않는 요청에 대해 처리 수행 - 명시적인 할당 요청이 없었음 */
-    if (upage_entry < USER_STACK) {
-      // TODO 명확한 조건을 추가해야 한다.
-      // if pg round up (va) is exist, then stack growth
-      // NOTE - 한번에 4KB 이상의 스택을 달라고 하는 양심없는 유저는 걸리지 않는다...
+    if ((uint64_t)f->rsp <= (uint64_t)addr && (uint64_t)addr < USER_STACK) {
+      // stack growth with legitimate stack pointer
+      // `CALL` 명령과 함께 rsp가 증가한 상태로 page fault가 발생해야만 OK
       vm_stack_growth(upage_entry);
       return true;
     }
