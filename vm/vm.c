@@ -219,6 +219,11 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
   // return vm_do_claim_page (page);
 }
 
+void vm_dealloc_page_each(struct hash_elem *elem, void *aux UNUSED) {
+  struct page *page = hash_entry(elem, struct page, hash_elem);
+  vm_dealloc_page(page);
+}
+
 /* Free the page.
  * DO NOT MODIFY THIS FUNCTION. */
 void
