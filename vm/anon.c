@@ -2,6 +2,8 @@
 
 #include "vm/vm.h"
 #include "devices/disk.h"
+#include "threads/mmu.h"
+#include <stdio.h>
 
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk;
@@ -25,18 +27,34 @@ vm_anon_init (void) {
 }
 
 /* Initialize the file mapping */
-bool
-anon_initializer (struct page *page, enum vm_type type, void *kva) {
-	/* Set up the handler */
-	page->operations = &anon_ops;
+bool anon_initializer(struct page *page, enum vm_type type, void *kva) {
+  /* Set up the handler */
+	bool success = false;
+  // FIXME 현재 page는 uninit_page로 초기화된 상태. 이걸 anon_page로 캐스팅 해도
+  // 되나?
+  struct anon_page *anon_page = &page->anon; 
 
-	struct anon_page *anon_page = &page->anon;
+	ASSERT (type == VM_ANON);
+
+	// TODO - do something with kva
+
+	page->operations = &anon_ops;
+	// page->frame->kva = kva;
+	page->anon = *anon_page; // FIXME 위의 FIXME에서 이어짐.
+	
+	ASSERT (page == page->frame->page);
+	success = true;
+	
+	return success;
 }
 
 /* Swap in the page by read contents from the swap disk. */
 static bool
 anon_swap_in (struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
+
+	// thread_current의 pml4에 할당	
+	pml4_set_page(thread_current()->pml4, page->va, kva, true);
 }
 
 /* Swap out the page by writing contents to the swap disk. */
