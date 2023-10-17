@@ -42,4 +42,5 @@ cd build
 # pintos --gdb -v -k --fs-disk=10 -p tests/userprog/exec-once:exec-once -p tests/userprog/child-simple:child-simple -- -q   -f run exec-once
 # pintos --gdb -v -k --fs-disk=10 -p tests/userprog/exec-missing:exec-missing -- -q   -f run exec-missing
 # pintos --gdb -v -k --fs-disk=10 -p tests/userprog/read-zero:read-zero -p ../../tests/userprog/sample-text:sample-text -- -q -f run read-zero
-pintos $1 -v -k --fs-disk=10 -p tests/userprog/args-none:args-none --swap-disk=4 -- -q   -f run args-none
+# pintos $1 -v -k --fs-disk=10 -p tests/userprog/args-none:args-none --swap-disk=4 -- -q   -f run args-none
+pintos -v -k -T 60 -m 20   --fs-disk=10 -p tests/userprog/args-many:args-many --swap-disk=4 -- -q   -f run 'args-many a b c d e f g h i j k l m n o p q r s t u v'
