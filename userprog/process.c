@@ -922,9 +922,6 @@ static bool setup_stack(struct intr_frame *if_) {
   * You should mark the page is stack. */
   if ((success = vm_claim_page(stack_bottom))) {
     if_->rsp = USER_STACK;
-    /* TODO: You should mark the page is stack. */
-    success = true;
-    vm_claim_page(stack_bottom);
   }
   return success;
 }
