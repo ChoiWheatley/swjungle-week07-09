@@ -59,7 +59,7 @@ C 코드 포매팅 (`C_Cpp.clang_format_style`)은 LLVM을 사용합니다. 일�
 
 ```json
 {
-  "C_Cpp.clang_format_style": "{ ColumnLimit: 80, IndentWidth: 4, TabWidth: 4 }",
+  "C_Cpp.clang_format_style": "{ ColumnLimit: 80, IndentWidth: 2, TabWidth: 2 }",
   "C_Cpp.clang_format_fallbackStyle": "LLVM",
 }
 ```
