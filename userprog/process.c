@@ -914,16 +914,12 @@ static bool setup_stack(struct intr_frame *if_) {
   bool success = false;
   void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 
-  if (vm_alloc_page_with_initializer(VM_ANON, stack_bottom, true, pml4_setter, NULL)) {
-    /* Map the stack on stack_bottom and claim the page immediately.
-    * If success, set the rsp accordingly.
-    * You should mark the page is stack. */
+  /* Map the stack on stack_bottom and claim the page immediately.
+  * If success, set the rsp accordingly.
+  * You should mark the page is stack. */
+  if ((success = vm_claim_page(stack_bottom))) {
     if_->rsp = USER_STACK;
-    /* TODO: You should mark the page is stack. */
-    success = true;
-    vm_claim_page(stack_bottom);
   }
-
   return success;
 }
 #endif /* VM */
