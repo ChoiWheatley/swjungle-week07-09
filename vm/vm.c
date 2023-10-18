@@ -217,11 +217,6 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
   // return vm_do_claim_page (page);
 }
 
-void vm_dealloc_page_each(struct hash_elem *elem, void *aux UNUSED) {
-  struct page *page = hash_entry(elem, struct page, hash_elem);
-  vm_dealloc_page(page);
-}
-
 /* Free the page.
  * DO NOT MODIFY THIS FUNCTION. */
 void
@@ -333,7 +328,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
   return true;
 }
 
-static void remove_pages(struct hash_elem *e, void *aux UNUSED) {
+static void vm_dealloc_page_each(struct hash_elem *e, void *aux UNUSED) {
   struct page *p = hash_entry(e, struct page, hash_elem);
   vm_dealloc_page(p);
 }
@@ -343,7 +338,7 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-  hash_clear(&spt->page_map, remove_pages);
+  hash_clear(&spt->page_map, vm_dealloc_page_each);
   ASSERT (hash_size(&spt->page_map) == 0);
 }
 
