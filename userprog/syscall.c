@@ -13,8 +13,8 @@
 #include "threads/loader.h"
 #include "threads/thread.h"
 #include "threads/init.h"
-#include "threads/palloc.h"
 #include "threads/malloc.h"
+#include "threads/palloc.h"
 #include "userprog/gdt.h"
 #include "userprog/process.h"
 #include "filesys/filesys.h"
@@ -433,6 +433,8 @@ static bool lazy_load_file(struct page *page, void *aux) {
   uint32_t read_bytes = hand_in->read_bytes;
   uint32_t zero_bytes = hand_in->zero_bytes;
   bool writable       = hand_in->writable;
+  size_t connected_page_cnt = hand_in->connected_page_cnt;
+  size_t connected_page_idx = hand_in->connected_page_idx;
 
   // code segment registration
   pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, writable);
@@ -516,8 +518,9 @@ void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
     }
   }
 
+  void *cursor = addr;
   while (actual_file_len > 0) {
-    void *upage = addr;
+    void *upage = cursor;
     size_t read_bytes = actual_file_len < PGSIZE ? actual_file_len : PGSIZE;
     size_t zero_bytes = PGSIZE - read_bytes;
 
@@ -526,9 +529,10 @@ void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
 
     struct file_page *file_page = malloc(sizeof(struct file_page));
     *file_page = (struct file_page) {
+      .aux_size = sizeof(struct file_page),
       .file = file,
       .ofs = offset,
-      .upage = addr,
+      .upage = cursor,
       .read_bytes = read_bytes,
       .zero_bytes = zero_bytes,
       .writable = writable,
@@ -542,7 +546,7 @@ void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
       return NULL;
     }
 
-    addr += PGSIZE;
+    cursor += PGSIZE;
     actual_file_len -= read_bytes;
     offset += read_bytes;
     idx += 1;
@@ -576,14 +580,11 @@ void munmap(void *addr) {
   struct thread *cur = thread_current();
   const size_t page_cnt = p->file.connected_page_cnt;
   for (size_t i = 0; i < page_cnt; i++) {
-    ASSERT((p = spt_find_page(spt, addr)) != NULL);
+    p = spt_find_page(spt, addr);
+    ASSERT(p); // 위(mmap)에서 검사했기 때문에 사실 여기에서 NULL이 나오는 건 말이 안됨.
 
-    // dirty flag를 확인한 뒤 파일에 write-back
-    if (pml4_is_dirty(cur->pml4, p->va)) {
-      file_write(p->file.file, p->va, p->file.read_bytes);
-    }
-
-    vm_dealloc_page(p);
+    spt_remove_page(spt, p);
+    // vm_dealloc_page(p);
     addr += PGSIZE;
   }
 }

@@ -70,5 +70,4 @@ anon_destroy (struct page *page) {
 	if (page->frame != NULL) {
 		free(page->frame);
 	}
-	// NOTE - anon or file로 변경되는 순간 aux는 이미 사용하고 free한 상태이다.
 }
