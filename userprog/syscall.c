@@ -519,7 +519,7 @@ void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
   }
 
   void *cursor = addr;
-  while (actual_file_len > 0) {
+  while ((uint64_t)cursor < (uint64_t)addr + length) {
     void *upage = cursor;
     size_t read_bytes = actual_file_len < PGSIZE ? actual_file_len : PGSIZE;
     size_t zero_bytes = PGSIZE - read_bytes;
