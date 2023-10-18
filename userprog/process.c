@@ -383,6 +383,7 @@ void process_exit(void) {
   sema_up(&t->wait_sema);
 
   process_cleanup();
+  hash_destroy(&t->spt.page_map, NULL);
 }
 
 /* Free the current process's resources. */
