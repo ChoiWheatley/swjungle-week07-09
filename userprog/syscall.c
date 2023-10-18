@@ -21,6 +21,7 @@
 #include "filesys/inode.h"
 #include "devices/input.h"
 #include "vm/vm.h"
+#include "round.h" // mmap
 
 /* System call.
  *
@@ -35,6 +36,18 @@
 #define MSR_LSTAR 0xc0000082        /* Long mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
 
+// lazy file load를 위한 인자전달 구조체
+static struct hand_in {
+  struct file *file;
+  off_t ofs;
+  uint8_t *upage;
+  uint32_t read_bytes;
+  uint32_t zero_bytes;
+  bool writable;
+
+  size_t connected_page_cnt;
+  size_t connected_page_idx;
+};
 
 void check_address(const void*);
 void syscall_entry(void);
@@ -143,8 +156,14 @@ void syscall_handler(struct intr_frame *f UNUSED) {
     case SYS_CLOSE:
       close(f->R.rdi);
       break;
+    case SYS_MMAP:
+      f->R.rax = mmap((void *)f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+      break;
+    case SYS_MUNMAP:
+      munmap((void *)f->R.rdi);
+      break;
     default:
-      // printf("system call!\n");
+      printf("no syscall!!!\n");
       thread_exit();
   }
 }
@@ -412,3 +431,163 @@ void delete_file_from_fd_table(int fd) {
 /* Extra */
 int dup2(int oldfd, int newfd) { return 0; }
 // !SECTION - Project 2 USERPROG SYSTEM CALL
+
+static bool lazy_load_file(struct page *page, void *aux) {
+  // cast to file from aux
+  struct hand_in *hand_in = aux;
+
+  // unpack hand_in struct pointer
+  struct file *file   = hand_in->file;
+  off_t ofs           = hand_in->ofs;
+  uint8_t *upage      = hand_in->upage;
+  uint32_t read_bytes = hand_in->read_bytes;
+  uint32_t zero_bytes = hand_in->zero_bytes;
+  bool writable       = hand_in->writable;
+
+  // code segment registration
+  pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, writable);
+
+  /* copy of load_segment when USERPROG */
+  ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
+  ASSERT(pg_ofs(upage) == 0);
+  ASSERT(ofs % PGSIZE == 0);
+  ASSERT (page->va == upage);
+
+  file_seek(file, ofs);
+  /* Do calculate how to fill this page.
+    * We will read PAGE_READ_BYTES bytes from FILE
+    * and zero the final PAGE_ZERO_BYTES bytes. */
+
+  /* Load this page. */
+  if (file_read(file, upage, read_bytes) != (int)read_bytes) {
+    return false;
+  }
+  memset(upage + read_bytes, 0, zero_bytes);
+
+  free(aux); // 인자 (malloc) free 수행
+
+  return true;
+}
+
+/**
+ * @brief upage ~ last_upage에 해당하는 spt 페이지를 삭제한다.
+ * 
+ * @param upage 
+ * @param last_upage
+ */
+static void remove_failed_pages(void *upage, void *last_upage) {
+  struct supplemental_page_table *spt = &thread_current()->spt;
+  struct page *p = NULL;
+  for (uint64_t i = upage; i <= last_upage; i += PGSIZE) {
+    vm_dealloc_page(p);
+  }
+}
+
+/**
+ * @brief 전달받은 addr에 length만큼 메모리를 할당한 뒤 file을 읽어서 반환
+ * 
+ * @param addr mapping을 수행할 user address
+ * @param length 할당받을 메모리의 크기
+ * @param writable 쓰기 권한 여부
+ * @param fd 데이터를 복사할 파일의 디스크립터 번호
+ * @param offset 파일을 읽기 시작할 위치
+ * 
+ * @return void* 
+ */
+void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
+  // argument check
+  // printf("addr: %p, length: %ld, writable: %d, fd: %d, offset: %ld\n", addr, length, writable, fd, offset);
+
+  if (addr == NULL || pg_ofs(addr) != 0) {
+    // bad addr
+    return NULL;
+  }
+  if (fd == 0 || fd == 1) {
+    // bad fd
+    return NULL;
+  }
+  if (length == 0) {
+    // bad length
+    return NULL;
+  }
+  
+  struct file *file = fd_to_file(fd);
+  if (file == NULL) {
+    // bad file
+    return NULL;
+  }
+  if (file_length(file) < offset) {
+    // bad offset
+    return NULL;
+  }
+
+  // file_length와 사용자가 요청하는 length의 괴리를 해소하기 위해 사용할 변수들
+  size_t actual_file_len = file_length(file) - offset;
+  const size_t page_cnt = DIV_ROUND_UP(length, PGSIZE);
+  size_t idx = 0;
+
+  while (actual_file_len > 0) {
+    void *upage = addr;
+    size_t read_bytes = actual_file_len < PGSIZE ? actual_file_len : PGSIZE;
+    size_t zero_bytes = PGSIZE - read_bytes;
+
+    ASSERT (pg_ofs(upage) == 0);
+    ASSERT (read_bytes + zero_bytes == PGSIZE);
+
+    struct hand_in *hand_in = malloc(sizeof(struct hand_in));
+    *hand_in = (struct hand_in) {
+      .file = file,
+      .ofs = offset,
+      .upage = addr,
+      .read_bytes = read_bytes,
+      .zero_bytes = zero_bytes,
+      .writable = writable,
+      .connected_page_cnt = page_cnt,
+      .connected_page_idx = idx
+    };
+
+    // 페이지 생성 도중에 실패하면 앞서 생성한 페이지를 모두 삭제한다.
+    if (!vm_alloc_page_with_initializer(VM_FILE, upage, writable, lazy_load_file, hand_in)) {
+      // failed to claim page
+      remove_failed_pages(addr, upage - PGSIZE);
+      return NULL;
+    }
+
+    addr += PGSIZE;
+    actual_file_len -= read_bytes;
+    offset += read_bytes;
+    idx += 1;
+  }
+
+  return addr;
+}
+
+/**
+ * @brief addr에 해당되는 페이지의 메모리를 할당해제하고 삭제한다.
+ * 
+ * @param addr  
+ */
+void munmap(void *addr) {
+  if (addr == NULL || pg_ofs(addr) != 0) {
+    // bad addr
+    return;
+  }
+
+  struct supplemental_page_table *spt = &thread_current()->spt;
+  struct page *p = spt_find_page(spt, addr);
+  if (p == NULL) {
+    // invalid page address
+    return ;
+  }
+  if (p->file.connected_page_idx != 0) {
+    // 중간에 낀 페이지를 free하려고 요청하므로 반려
+    return;
+  }
+
+  const size_t page_cnt = p->file.connected_page_cnt;
+  for (size_t i = 0; i < page_cnt; i++) {
+    p = spt_find_page(spt, addr);
+    vm_dealloc_page(p);
+    addr += PGSIZE;
+  }
+}
