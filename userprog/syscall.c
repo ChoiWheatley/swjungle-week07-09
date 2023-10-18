@@ -1,4 +1,3 @@
-#include "userprog/syscall.h"
 #include "lib/stdio.h"
 #include "lib/user/syscall.h"
 
@@ -301,6 +300,11 @@ struct file *fd_to_file(int fd) {
  */
 int read(int fd, void *buffer, unsigned size) {
   check_address(buffer);
+
+  if (!pml4_is_writable(thread_current()->pml4, buffer)) {
+    exit(-1);
+  }
+
   uint8_t *buf = buffer;
   off_t read_count;
 
