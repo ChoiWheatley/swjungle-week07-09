@@ -52,6 +52,8 @@ struct page {
 
 	struct hash_elem hash_elem; // hash element for supplemental page table
 	
+	char __unused[49];
+	
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union {

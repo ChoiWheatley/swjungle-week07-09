@@ -44,6 +44,8 @@ file_backed_swap_out (struct page *page) {
 static void
 file_backed_destroy (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
+	// TODO dirty bit를 확인해서, 변경된 기록이 있으면 파일에 내용을 쓰고 destory 수행
+	
 }
 
 /* Do the mmap */

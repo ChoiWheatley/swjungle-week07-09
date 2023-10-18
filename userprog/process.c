@@ -28,6 +28,7 @@
 #endif
 
 static struct hand_in {
+  uint64_t size;
   struct file *file;
   off_t ofs;
   uint8_t *upage;
@@ -880,6 +881,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 
     hand_in = (struct hand_in *) malloc(sizeof(struct hand_in));
     *hand_in = (struct hand_in) {
+      .size = sizeof(struct hand_in),
       .file = file,
       .ofs = ofs,
       .upage = upage,
@@ -914,15 +916,12 @@ static bool setup_stack(struct intr_frame *if_) {
   bool success = false;
   void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 
-  if (vm_alloc_page_with_initializer(VM_ANON, stack_bottom, true, pml4_setter, NULL)) {
-    /* Map the stack on stack_bottom and claim the page immediately.
-    * If success, set the rsp accordingly.
-    * You should mark the page is stack. */
+  /* Map the stack on stack_bottom and claim the page immediately.
+  * If success, set the rsp accordingly.
+  * You should mark the page is stack. */
+  if ((success = vm_claim_page(stack_bottom))) {
     if_->rsp = USER_STACK;
-    /* TODO: You should mark the page is stack. */
-    success = true;
   }
-
   return success;
 }
 #endif /* VM */
