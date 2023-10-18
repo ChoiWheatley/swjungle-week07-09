@@ -292,20 +292,36 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 	// TODO 추가적인 작업 필요
 }
 
+/**
+ * @brief Get the size of aux object
+ * @note 모든 aux 인자 전달 구조체는 첫번째 필드로 size를 가지고 있다.
+ * @param aux 
+ * @return uint64_t 
+ */
+static uint64_t get_size_of_aux(void *aux) {
+  return *(uint64_t *)aux;
+}
+
 /* Copy supplemental page table from src to dst */
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
                                   struct supplemental_page_table *src UNUSED) {
   struct hash_iterator i;
   struct page *p, *dup_p;
 
+  // 현재 child thread 실행중인 상태
   hash_first(&i, &src->page_map);
   while (hash_next(&i)) {
     p = hash_entry(hash_cur(&i), struct page, hash_elem);
     dup_p = (struct page *)calloc(1, sizeof(struct page));
     memcpy(dup_p, p, sizeof(struct page));
 
-    // 부모 페이지에 frame이 이미 할당되어 있으면 (fault 가 이미 발생했으면) frame 내용을 복사
-    if (p->frame != NULL) {
+    if (p->frame == NULL) {
+      // 부모 페이지에 frame이 할당되어 있지 않으면 (fault 가 발생하지 않았으면) aux를 복사
+      uint64_t aux_size = get_size_of_aux(p->uninit.aux);
+      dup_p->uninit.aux = calloc(1, aux_size);
+      memcpy(dup_p->uninit.aux, p->uninit.aux, aux_size);
+    } else {
+      // 부모 페이지에 frame이 이미 할당되어 있으면 (fault 가 이미 발생했으면) frame 내용을 복사
       vm_do_claim_page(dup_p);
       memcpy(dup_p->frame->kva, p->frame->kva, PGSIZE);
     }

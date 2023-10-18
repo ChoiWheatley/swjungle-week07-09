@@ -28,6 +28,7 @@
 #endif
 
 static struct hand_in {
+  uint64_t size;
   struct file *file;
   off_t ofs;
   uint8_t *upage;
@@ -880,6 +881,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 
     hand_in = (struct hand_in *) malloc(sizeof(struct hand_in));
     *hand_in = (struct hand_in) {
+      .size = sizeof(struct hand_in),
       .file = file,
       .ofs = ofs,
       .upage = upage,
