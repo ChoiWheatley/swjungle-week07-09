@@ -317,12 +317,19 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
   return true;
 }
 
+static bool remove_pages(struct hash_elem *e, void *aux UNUSED) {
+  struct page *p = hash_entry(e, struct page, hash_elem);
+  vm_dealloc_page(p);
+  return true;
+}
+
 /* Free the resource hold by the supplemental page table */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-  // hash_apply(&spt->page_map, vm_dealloc_page_each);
+  hash_clear(&spt->page_map, remove_pages);
+  ASSERT (hash_size(&spt->page_map) == 0);
 }
 
 /** 
