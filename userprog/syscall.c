@@ -511,7 +511,12 @@ void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
     return NULL;
   }
   
-  struct file *file = file_duplicate(fd_to_file(fd));
+  struct file *origin_file = fd_to_file(fd);
+  if (origin_file == NULL) {
+    return NULL;
+  }
+
+  struct file *file = file_duplicate(origin_file);
   if (file == NULL) {
     // bad file
     return NULL;
