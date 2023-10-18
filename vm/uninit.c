@@ -56,7 +56,6 @@ uninit_initialize (struct page *page, void *kva) {
 	return uninit->page_initializer (page, uninit->type, kva) &&
 		(init ? init (page, aux) : true);
 }
-#include <stdio.h>
 
 /* Free the resources hold by uninit_page. Although most of pages are transmuted
  * to other page objects, it is possible to have uninit pages when the process
