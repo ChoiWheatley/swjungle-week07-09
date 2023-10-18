@@ -14,6 +14,7 @@
 #include "threads/thread.h"
 #include "threads/init.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "userprog/gdt.h"
 #include "userprog/process.h"
 #include "filesys/filesys.h"
@@ -21,6 +22,7 @@
 #include "filesys/inode.h"
 #include "devices/input.h"
 #include "vm/vm.h"
+#include "vm/file.h"
 #include "round.h" // mmap
 
 /* System call.
@@ -35,19 +37,6 @@
 #define MSR_STAR 0xc0000081         /* Segment selector msr */
 #define MSR_LSTAR 0xc0000082        /* Long mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
-
-// lazy file load를 위한 인자전달 구조체
-static struct hand_in {
-  struct file *file;
-  off_t ofs;
-  uint8_t *upage;
-  uint32_t read_bytes;
-  uint32_t zero_bytes;
-  bool writable;
-
-  size_t connected_page_cnt;
-  size_t connected_page_idx;
-};
 
 void check_address(const void*);
 void syscall_entry(void);
@@ -157,7 +146,7 @@ void syscall_handler(struct intr_frame *f UNUSED) {
       close(f->R.rdi);
       break;
     case SYS_MMAP:
-      f->R.rax = mmap((void *)f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+      f->R.rax = (uint64_t)mmap((void *)f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
       break;
     case SYS_MUNMAP:
       munmap((void *)f->R.rdi);
@@ -434,9 +423,10 @@ int dup2(int oldfd, int newfd) { return 0; }
 
 static bool lazy_load_file(struct page *page, void *aux) {
   // cast to file from aux
-  struct hand_in *hand_in = aux;
+  struct file_page *hand_in = aux;
 
   // unpack hand_in struct pointer
+  uint64_t aux_size = hand_in->aux_size;
   struct file *file   = hand_in->file;
   off_t ofs           = hand_in->ofs;
   uint8_t *upage      = hand_in->upage;
@@ -467,20 +457,6 @@ static bool lazy_load_file(struct page *page, void *aux) {
   free(aux); // 인자 (malloc) free 수행
 
   return true;
-}
-
-/**
- * @brief upage ~ last_upage에 해당하는 spt 페이지를 삭제한다.
- * 
- * @param upage 
- * @param last_upage
- */
-static void remove_failed_pages(void *upage, void *last_upage) {
-  struct supplemental_page_table *spt = &thread_current()->spt;
-  struct page *p = NULL;
-  for (uint64_t i = upage; i <= last_upage; i += PGSIZE) {
-    vm_dealloc_page(p);
-  }
 }
 
 /**
@@ -529,7 +505,16 @@ void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
   // file_length와 사용자가 요청하는 length의 괴리를 해소하기 위해 사용할 변수들
   size_t actual_file_len = file_length(file) - offset;
   const size_t page_cnt = DIV_ROUND_UP(length, PGSIZE);
+  struct supplemental_page_table *spt = &thread_current()->spt;
   size_t idx = 0;
+  
+  for (size_t i = 0; i < page_cnt; i++) {
+    // check consecutive pages available
+    if (spt_find_page(spt, addr + i * PGSIZE) != NULL) {
+      // bad addr
+      return NULL;
+    }
+  }
 
   while (actual_file_len > 0) {
     void *upage = addr;
@@ -539,8 +524,8 @@ void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
     ASSERT (pg_ofs(upage) == 0);
     ASSERT (read_bytes + zero_bytes == PGSIZE);
 
-    struct hand_in *hand_in = malloc(sizeof(struct hand_in));
-    *hand_in = (struct hand_in) {
+    struct file_page *file_page = malloc(sizeof(struct file_page));
+    *file_page = (struct file_page) {
       .file = file,
       .ofs = offset,
       .upage = addr,
@@ -551,10 +536,9 @@ void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
       .connected_page_idx = idx
     };
 
-    // 페이지 생성 도중에 실패하면 앞서 생성한 페이지를 모두 삭제한다.
-    if (!vm_alloc_page_with_initializer(VM_FILE, upage, writable, lazy_load_file, hand_in)) {
-      // failed to claim page
-      remove_failed_pages(addr, upage - PGSIZE);
+    if (!vm_alloc_page_with_initializer(VM_FILE, upage, writable, lazy_load_file, file_page)) {
+      // failed to claim page, this should never happen
+      PANIC("failed to claim page\n");
       return NULL;
     }
 
@@ -588,10 +572,17 @@ void munmap(void *addr) {
     // 중간에 낀 페이지를 free하려고 요청하므로 반려
     return;
   }
-
+  
+  struct thread *cur = thread_current();
   const size_t page_cnt = p->file.connected_page_cnt;
   for (size_t i = 0; i < page_cnt; i++) {
-    p = spt_find_page(spt, addr);
+    ASSERT((p = spt_find_page(spt, addr)) != NULL);
+
+    // dirty flag를 확인한 뒤 파일에 write-back
+    if (pml4_is_dirty(cur->pml4, p->va)) {
+      file_write(p->file.file, p->va, p->file.read_bytes);
+    }
+
     vm_dealloc_page(p);
     addr += PGSIZE;
   }
