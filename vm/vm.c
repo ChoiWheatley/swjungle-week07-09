@@ -195,7 +195,9 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	void *upage_entry = pg_round_down(addr);
 
   /* Validate the fault */
-  ASSERT (is_user_vaddr(addr)); // if page's type is uninit, BOOM
+  if (is_user_vaddr(addr) == false) { // if page's type is uninit, BOOM
+    return false;
+  }
   // printf("[*] 💥 fault_address: %p\n", addr);
 
   if ((page = spt_find_page(spt, upage_entry)) != NULL) {
