@@ -486,7 +486,7 @@ void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
   // argument check
   // printf("addr: %p, length: %ld, writable: %d, fd: %d, offset: %ld\n", addr, length, writable, fd, offset);
 
-  if (addr == NULL || pg_ofs(addr) != 0) {
+  if (!is_user_vaddr(addr) || addr == NULL || pg_ofs(addr) != 0) {
     // bad addr
     return NULL;
   }
@@ -494,7 +494,9 @@ void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
     // bad fd
     return NULL;
   }
-  if (length == 0) {
+  // overflow 발생으로 인해 length가 굉장히 큰 수가 되는 경우가 있다.
+  // 비교연산에서도 addr + length를 수행하면 overflow가 다시 발생할 수 있으므로 각각의 경우를 나눠서 검사한다.
+  if (length == 0 || (uint64_t)addr >= KERN_BASE - length || length >= KERN_BASE - (uint64_t)addr) {
     // bad length
     return NULL;
   }
