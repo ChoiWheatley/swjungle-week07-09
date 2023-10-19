@@ -110,7 +110,7 @@ void syscall_handler(struct intr_frame *f UNUSED) {
       f->R.rax = fork((void *)f->R.rdi);
       break;
     case SYS_EXEC:
-      exec((void *)f->R.rdi);
+      f->R.rax = exec((void *)f->R.rdi);
       break;
     case SYS_WAIT:
       f->R.rax = wait(f->R.rdi);
@@ -195,7 +195,11 @@ int exec(const char *file) {
   memcpy((void *)page, file, strlen(file) + 1);
 
   int success = process_exec((void *)page);
-  // free page if unsuccesful
+  if (success == -1) {
+    // free page if unsuccesful
+    printf("[*] ☠️ process_exec() failed\n");
+    palloc_free_page(page);
+  }
 
   return success;
 }
