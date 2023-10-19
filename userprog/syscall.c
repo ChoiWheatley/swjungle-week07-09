@@ -463,6 +463,10 @@ static bool lazy_load_file(struct page *page, void *aux) {
   memset(upage + read_bytes, 0, zero_bytes);
 
   free(aux); // 인자 (malloc) free 수행
+  
+  // set not dirty: 파일 내용을 복사하면서 dirty로 체크됨.
+  // 이를 해제해두면 memeory에 데이터가 쓸때 dirty가 체크되므로 수정여부를 판단 가능
+  pml4_set_dirty(thread_current()->pml4, page->va, false);
 
   return true;
 }
