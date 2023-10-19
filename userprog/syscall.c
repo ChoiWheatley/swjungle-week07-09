@@ -509,7 +509,7 @@ void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
     // bad file
     return NULL;
   }
-  if (file_length(file) < offset) {
+  if (file_length(file) < offset || pg_ofs(offset) != 0) {
     // bad offset
     return NULL;
   }
