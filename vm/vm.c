@@ -68,8 +68,6 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
       return false;
     }
 
-    page->writable = writable;
-
     switch (type) {
     case VM_ANON:
       initializer = anon_initializer;
@@ -83,6 +81,8 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 
     ASSERT (initializer != NULL);
     uninit_new(page, upage_entry, init, type, aux, initializer);
+
+    page->writable = writable;
 
     /* Insert the page into the spt. */
     spt_insert_page(spt, page);
@@ -195,7 +195,9 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	void *upage_entry = pg_round_down(addr);
 
   /* Validate the fault */
-  ASSERT (is_user_vaddr(addr)); // if page's type is uninit, BOOM
+  if (is_user_vaddr(addr) == false) { // if page's type is uninit, BOOM
+    return false;
+  }
   // printf("[*] 💥 fault_address: %p\n", addr);
 
   if ((page = spt_find_page(spt, upage_entry)) != NULL) {

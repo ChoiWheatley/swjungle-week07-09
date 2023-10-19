@@ -22,6 +22,9 @@ test_main (void)
   CHECK ((handle = open ("sample.txt")) > 1, "open \"sample.txt\"");
   CHECK ((map = mmap (ACTUAL, 4096, 1, handle, 0)) != MAP_FAILED, "mmap \"sample.txt\"");
   memcpy (ACTUAL, sample, strlen (sample));
+
+  // NOTE - munmap을 해야 파일에 쓰여진다. dirty flag가 1이 되어야 한다. 참고로
+  // MMU가 dirty flag를 알아서 수정하기 때문에 `pml4_is_dirty`만 읽으면 된다.
   munmap (map);
 
   /* Read back via read(). */

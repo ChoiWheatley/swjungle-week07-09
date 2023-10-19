@@ -21,6 +21,7 @@ test_main (void)
   CHECK ((map = mmap (ACTUAL, 4096, 0, handle, 0)) != MAP_FAILED, "mmap \"large.txt\" with writable=0");
   msg ("about to write into read-only mmap'd memory");
   *((int *)map) = 0;
+  // NOTE - not reached here due to writing to read-only memory
   msg ("Error should have occured");
   munmap (map);
   close (handle);
