@@ -316,6 +316,12 @@ int read(int fd, void *buffer, unsigned size) {
   uint8_t *buf = buffer;
   off_t read_count;
 
+  // check buffer address
+  struct page *p = spt_find_page(&thread_current()->spt, pg_round_down(buffer));
+  if (p == NULL || (p->writable == false)) {
+    exit(-1);
+  }
+
   if (fd == STDIN_FILENO) {  // STDIN일 때
     char key;
     for (read_count = 0; read_count < size; read_count++) {
