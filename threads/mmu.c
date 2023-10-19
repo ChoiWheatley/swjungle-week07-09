@@ -279,6 +279,14 @@ pml4_is_dirty (uint64_t *pml4, const void *vpage) {
 	return pte != NULL && (*pte & PTE_D) != 0;
 }
 
+/**
+ * @brief 가상주소에 연결된 PTE가 쓰기 가능한지 여부를 반환한다.
+ */
+bool pml4_is_writable (uint64_t *pml4, const void *vpage) {
+	uint64_t *pte = pml4e_walk (pml4, (uint64_t) vpage, false);
+  return pte!= NULL && (*pte & PTE_W)!= 0;
+}
+
 /* Set the dirty bit to DIRTY in the PTE for virtual page VPAGE
  * in PML4. */
 void
