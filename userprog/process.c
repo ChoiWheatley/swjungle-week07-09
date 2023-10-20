@@ -235,8 +235,9 @@ static void __do_fork(void *aux) {
 
   /* Finally, switch to the newly created process. */
   sema_up(&current->fork_sema);
-  if (succ)
+  if (succ) {
     do_iret(&if_);
+  }
 
 error:  // fork가 제대로 되지 않은 경우
   current->exit_status = -1;
@@ -824,6 +825,8 @@ static bool lazy_load_segment(struct page *page, void *aux) {
     file = t->running;
   }
   ASSERT (file != NULL);
+  
+  lock_acquire(inode_get_lock(file_get_inode(file)));
 
   // code segment registration
   pml4_set_page(t->pml4, page->va, page->frame->kva, writable);
@@ -841,12 +844,14 @@ static bool lazy_load_segment(struct page *page, void *aux) {
 
   /* Load this page. */
   if (file_read(file, upage, read_bytes) != (int)read_bytes) {
+    lock_release(inode_get_lock(file_get_inode(file)));
     return false;
   }
   memset(upage + read_bytes, 0, zero_bytes);
 
   free(aux); // 인자 (malloc) free 수행
 
+  lock_release(inode_get_lock(file_get_inode(file)));
   return true;
 }
 
@@ -873,6 +878,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 
   struct hand_in *hand_in = NULL;
 
+  lock_acquire(inode_get_lock(file_get_inode(file)));
   while (read_bytes > 0 || zero_bytes > 0) {
     /* Do calculate how to fill this page.
      * We will read PAGE_READ_BYTES bytes from FILE
@@ -896,8 +902,10 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
      * NOTE - possibility of memory leak (file)
      */
     if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable,
-                                        lazy_load_segment, hand_in))
+                                        lazy_load_segment, hand_in)) {
+      lock_release(inode_get_lock(file_get_inode(file)));
       return false;
+    }
 
     /* Advance. */
     ofs += PGSIZE;
@@ -905,6 +913,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
     read_bytes -= page_read_bytes;
     zero_bytes -= page_zero_bytes;
   }
+  lock_release(inode_get_lock(file_get_inode(file)));
   return true;
 }
 
