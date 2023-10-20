@@ -50,6 +50,7 @@ file_backed_swap_in (struct page *page, void *kva) {
 
 	// kva에 file의 내용을 읽어온다
 	filesys_lock_acquire();
+	lock_acquire(inode_get_lock(file_get_inode(file_page->file)));
 	file_seek(file_page->file, file_page->ofs);
 	if (file_read(file_page->file, kva, file_page->read_bytes) !=
 			file_page->read_bytes) {
@@ -57,6 +58,7 @@ file_backed_swap_in (struct page *page, void *kva) {
 		goto done;
 	}
 	memset(kva + file_page->read_bytes, 0, file_page->zero_bytes);
+	lock_release(inode_get_lock(file_get_inode(file_page->file)));
 	filesys_lock_release();
 
 	pml4_set_page(thread_current()->pml4, page->va, page->frame->kva,
