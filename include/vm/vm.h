@@ -70,6 +70,7 @@ struct page {
 struct frame {
 	void *kva; // kernel virtual address
 	struct page *page; // back reference for page
+	struct list_elem elem // frame table element
 };
 
 /* The function table for page operations.

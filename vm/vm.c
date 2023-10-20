@@ -8,6 +8,12 @@
 #include "userprog/process.h"
 #include <stdio.h>
 
+#include <string.h> // memcpy
+#include "threads/mmu.h" // pml4 set
+
+// frame table: victim 선청을 위한 자료구조
+struct list frame_table;
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void
@@ -20,6 +26,7 @@ vm_init (void) {
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
+  list_init(&frame_table);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -132,7 +139,9 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
-	 /* TODO: The policy for eviction is up to you. */
+
+  // policy: FIFO
+	victim = list_entry(list_pop_front(&frame_table), struct frame, elem);
 
 	return victim;
 }
@@ -142,7 +151,11 @@ vm_get_victim (void) {
 static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
+
 	/* TODO: swap out the victim and return the evicted frame. */
+  swap_out(victim->page);
+  victim->page->frame = NULL;
+  victim->page = NULL;
 
   ASSERT(victim != NULL);
 	return victim;
@@ -164,6 +177,8 @@ vm_get_frame (void) {
   struct frame *frame = malloc(sizeof(struct frame));
   frame->kva = kva;
   frame->page = NULL;
+
+  list_push_back(&frame_table, &frame->elem); // 생성한 frame 관리
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
