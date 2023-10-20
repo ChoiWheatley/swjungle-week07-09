@@ -5,6 +5,12 @@
 #include "threads/mmu.h"
 #include <stdio.h>
 
+#include "kernel/bitmap.h"
+#include <round.h>
+
+// Swap Table Info
+struct bitmap *swap_bitmap;
+
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk;
 static bool anon_swap_in (struct page *page, void *kva);
@@ -22,9 +28,12 @@ static const struct page_operations anon_ops = {
 /* Initialize the data for anonymous pages */
 void
 vm_anon_init (void) {
+	uint64_t pg_cnt;
+
 	filesys_lock_acquire();
-	/* TODO: Set up the swap_disk. */
-	swap_disk = NULL;
+	swap_disk = disk_get(1, 1);
+	pg_cnt = disk_size(swap_disk) / (8 * DISK_SECTOR_SIZE);
+	swap_bitmap = bitmap_create(pg_cnt);
 	filesys_lock_release();
 }
 
@@ -53,20 +62,47 @@ bool anon_initializer(struct page *page, enum vm_type type, void *kva) {
 /* Swap in the page by read contents from the swap disk. */
 static bool
 anon_swap_in (struct page *page, void *kva) {
-	filesys_lock_acquire();
 	struct anon_page *anon_page = &page->anon;
+	if (anon_page->area != -1 || page->frame == NULL) {
+		return false;
+	}
 
-	// thread_current의 pml4에 할당	
-	pml4_set_page(thread_current()->pml4, page->va, kva, true);
+  filesys_lock_acquire();
+  disk_sector_t start_sector = anon_page->area * 8;
+  for (disk_sector_t i = 0; i < 8; i++) {
+    disk_read(swap_disk, start_sector + i,
+              (char *)kva + i * DISK_SECTOR_SIZE);
+  }
+  bitmap_flip(swap_bitmap, anon_page->area);
+  anon_page->area = -1;
 	filesys_lock_release();
+
+  // thread_current의 pml4에 할당	
+	pml4_set_page(thread_current()->pml4, page->va, kva, true);
 }
 
 /* Swap out the page by writing contents to the swap disk. */
 static bool
 anon_swap_out (struct page *page) {
-	filesys_lock_acquire();
 	struct anon_page *anon_page = &page->anon;
+  if (anon_page->area != -1 || page->frame == NULL) {
+    return false;
+  }
+
+	filesys_lock_acquire();
+  anon_page->area = bitmap_scan_and_flip(swap_bitmap, 0, 1, false);
+  if (anon_page->area == BITMAP_ERROR) {
+    PANIC("Swap Disk is Full!");
+  }
+
+  disk_sector_t start_sector = anon_page->area * 8;
+  for (disk_sector_t i = 0; i < 8; i++) {
+    disk_write(swap_disk, start_sector + i,
+               (char *)page->frame->kva + i * DISK_SECTOR_SIZE);
+  }
 	filesys_lock_release();
+
+  pml4_clear_page(thread_current()->pml4, page->va);
 }
 
 /* Destroy the anonymous page. PAGE will be freed by the caller. */
