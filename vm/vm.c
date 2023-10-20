@@ -158,8 +158,11 @@ vm_evict_frame (void) {
   if (victim == NULL) {
     return NULL;
   }
+  if (victim->page == NULL) {
+    // victim에 해당하는 frame이 할당된 page가 없다면 그냥 반환
+    return victim;
+  }
 
-	/* TODO: swap out the victim and return the evicted frame. */
   swap_out(victim->page);
   victim->page->frame = NULL;
   victim->page = NULL;
