@@ -209,6 +209,7 @@ vm_stack_growth (void *addr UNUSED) {
 /* Handle the fault on write_protected page */
 static bool
 vm_handle_wp (struct page *page UNUSED) {
+  // TODO 어떻게 활용할까?
 }
 
 /* Return true on success */
@@ -226,6 +227,11 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
   // printf("[*] 💥 fault_address: %p\n", addr);
 
   if ((page = spt_find_page(spt, upage_entry)) != NULL) {
+    if (page->frame != NULL && page->writable == false && write == true) {
+      // 쓰기 불가능한 페이지에 쓰려고 하면 false 반환
+      // TODO vm_handle_wp를 활용해야 할것 같은데 방법이 떠오르지 않는다.
+      return false;
+    }
     // case 1. file-backed, case 2. swap-out, case 3. first stack
     if (vm_do_claim_page(page)) {
       return true;
