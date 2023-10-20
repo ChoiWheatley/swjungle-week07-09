@@ -527,7 +527,7 @@ static bool load(const char *file_name, struct intr_frame *if_) {
   bool success = false;
   int i;
   
-  // load_lock_acquire();
+  // filesys_lock_acquire();
 
   /* Allocate and activate page directory. */
   t->pml4 = pml4_create();
@@ -634,7 +634,7 @@ static bool load(const char *file_name, struct intr_frame *if_) {
 
 done:
   /* We arrive here whether the load is successful or not. */
-  // load_lock_release();
+  // filesys_lock_release();
   return success;
 }
 

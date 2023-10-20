@@ -11,6 +11,8 @@ struct file *file_reopen (struct file *);
 struct file *file_duplicate (struct file *file);
 void file_close (struct file *);
 struct inode *file_get_inode (struct file *);
+const char *file_get_name (struct file *);
+void file_set_name (struct file *file, const char *name);
 
 /* Reading and writing. */
 off_t file_read (struct file *, void *, off_t);

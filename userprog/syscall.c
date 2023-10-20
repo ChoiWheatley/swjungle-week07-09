@@ -255,6 +255,7 @@ int open(const char *file) {
   if (fd == -1) {
     file_close(file_obj);
   }
+  file_set_name(file_obj, file);
   return fd;
 }
 
@@ -411,6 +412,7 @@ void close(int fd) {
     return;
   }
   delete_file_from_fd_table(fd);
+  printf("[*] 📴 \"%s\" closed (%s)\n", file_get_name(file), thread_current()->name);
   file_close(file);
 }
 

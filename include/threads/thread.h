@@ -213,8 +213,8 @@ bool origin_priority_dsc_d(const struct list_elem *a, const struct list_elem *b,
                            void *aux UNUSED);
 bool origin_priority_asc_d(const struct list_elem *a, const struct list_elem *b,
                            void *aux UNUSED);
-void load_lock_acquire();
-void load_lock_release();
+void filesys_lock_acquire();
+void filesys_lock_release();
 /** !SECTION - Additional Decl */
 
 /** SECTION - Fixed Point Arithmetic Operations */
