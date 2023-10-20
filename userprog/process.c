@@ -539,9 +539,9 @@ static bool load(const char *file_name, struct intr_frame *if_) {
   }
 
   /* Open executable file. */
+  thread_yield();
   file = filesys_open(file_name);
   if (file == NULL) {
-    file_close(file);
     printf("load: %s: open failed\n", file_name);
     goto done;
   }

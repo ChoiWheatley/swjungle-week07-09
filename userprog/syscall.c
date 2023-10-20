@@ -205,7 +205,7 @@ int exec(const char *file) {
   int success = process_exec((void *)page);
   if (success == -1) {
     // free page if unsuccesful
-    printf("[*] ☠️ process_exec() failed\n");
+    // printf("[*] ☠️ process_exec() failed\n");
     palloc_free_page(page);
   }
 

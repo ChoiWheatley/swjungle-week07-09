@@ -20,14 +20,10 @@ main (int argc UNUSED, char *argv[])
   size_t size;
   size_t i;
 
-  // quiet = true;
-  msg("[*] 👶 응애 나 자식 프로세스");
-
+  quiet = true;
   CHECK ((handle = open (argv[1])) > 1, "open \"%s\"", argv[1]);
 
   size = read (handle, buf, sizeof buf);
-
-  msg("[*] 👶 응애 나 파일 다 읽음");
 
   for (i = 0; i < size; i++)
     histogram[buf[i]]++;
@@ -42,6 +38,5 @@ main (int argc UNUSED, char *argv[])
   write (handle, buf, size);
   close (handle);
   
-  msg("[*] 👶 응애 나 할 일 다함");
   return 123;
 }

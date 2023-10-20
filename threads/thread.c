@@ -56,6 +56,8 @@ static struct thread *initial_thread;
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
 
+struct lock g_load_lock;
+
 /* Thread destruction requests */
 static struct list destruction_req;
 
@@ -129,6 +131,7 @@ thread_init (void) {
 
   /* Init the global thread context */
   lock_init (&tid_lock);
+  lock_init (&g_load_lock);
   list_init (&ready_list);
   list_init (&destruction_req);
   list_init (&g_sleep_list);
@@ -834,6 +837,14 @@ bool origin_priority_asc_d(const struct list_elem *a, const struct list_elem *b,
   struct thread *b_th = d_elem_to_thread(b);
 
   return a_th->priority < b_th->priority;
+}
+
+void load_lock_acquire() {
+  lock_acquire(&g_load_lock);
+}
+
+void load_lock_release() {
+  lock_release(&g_load_lock);
 }
 
 /* Switching the thread by activating the new thread's page
