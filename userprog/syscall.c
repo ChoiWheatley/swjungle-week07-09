@@ -604,14 +604,17 @@ void munmap(void *addr) {
     return;
   }
   
-  struct thread *cur = thread_current();
-  const size_t page_cnt = p->file.connected_page_cnt;
-  for (size_t i = 0; i < page_cnt; i++) {
-    p = spt_find_page(spt, addr);
-    ASSERT(p); // 위(mmap)에서 검사했기 때문에 사실 여기에서 NULL이 나오는 건 말이 안됨.
+  // file의 첫페이지를 destroy 할 경우 내부적으로 연관된 페이지를 모두 삭제한다.
+  spt_remove_page(spt, p);
 
-    spt_remove_page(spt, p);
-    // vm_dealloc_page(p);
-    addr += PGSIZE;
-  }
+  // struct thread *cur = thread_current();
+  // const size_t page_cnt = p->file.connected_page_cnt;
+  // for (size_t i = 0; i < page_cnt; i++) {
+  //   p = spt_find_page(spt, addr);
+  //   ASSERT(p); // 위(mmap)에서 검사했기 때문에 사실 여기에서 NULL이 나오는 건 말이 안됨.
+
+  //   spt_remove_page(spt, p);
+  //   // vm_dealloc_page(p);
+  //   addr += PGSIZE;
+  // }
 }
