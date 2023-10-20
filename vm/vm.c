@@ -139,9 +139,13 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
-
+  if (list_empty(&frame_table)) {
+    return NULL;
+  }
   // policy: FIFO
-	victim = list_entry(list_pop_front(&frame_table), struct frame, elem);
+  struct list_elem *victim_elem = list_pop_front(&frame_table);
+  list_push_back(&frame_table, victim_elem);
+	victim = list_entry(victim_elem, struct frame, elem);
 
 	return victim;
 }
@@ -151,6 +155,9 @@ vm_get_victim (void) {
 static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
+  if (victim == NULL) {
+    return NULL;
+  }
 
 	/* TODO: swap out the victim and return the evicted frame. */
   swap_out(victim->page);
@@ -327,14 +334,16 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
     dup_p = (struct page *)calloc(1, sizeof(struct page));
     memcpy(dup_p, p, sizeof(struct page));
 
-    if (p->frame == NULL) {
+    if (p->operations->type == VM_UNINIT) {
       // 부모 페이지에 frame이 할당되어 있지 않으면 (fault 가 발생하지 않았으면) aux를 복사
       uint64_t aux_size = get_size_of_aux(p->uninit.aux);
       dup_p->uninit.aux = calloc(1, aux_size);
       memcpy(dup_p->uninit.aux, p->uninit.aux, aux_size);
     } else {
       // 부모 페이지에 frame이 이미 할당되어 있으면 (fault 가 이미 발생했으면) frame 내용을 복사
-      vm_do_claim_page(dup_p);
+      dup_p->frame = vm_get_frame();
+      ASSERT(dup_p->frame != NULL);
+      pml4_set_page(thread_current()->pml4, p->va, dup_p->frame->kva, p->writable);
       memcpy(dup_p->frame->kva, p->frame->kva, PGSIZE);
     }
 
