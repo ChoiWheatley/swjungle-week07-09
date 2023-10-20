@@ -1,6 +1,5 @@
 #include "filesys/file.h"
 #include <debug.h>
-#include <string.h>
 #include "filesys/inode.h"
 #include "threads/malloc.h"
 
@@ -9,7 +8,6 @@ struct file {
 	struct inode *inode;        /* File's inode. */
 	off_t pos;                  /* Current position. */
 	bool deny_write;            /* Has file_deny_write() been called? */
-	char name[128];
 };
 
 /* Opens a file for the given INODE, of which it takes ownership,
@@ -64,14 +62,6 @@ file_close (struct file *file) {
 struct inode *
 file_get_inode (struct file *file) {
 	return file->inode;
-}
-
-const char *file_get_name (struct file *file) {
-	return file->name;
-}
-
-void file_set_name (struct file *file, const char *name) {
-	strlcpy(file->name, name, sizeof file->name);
 }
 
 /* Reads SIZE bytes from FILE into BUFFER,

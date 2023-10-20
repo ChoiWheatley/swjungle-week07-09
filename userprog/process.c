@@ -250,7 +250,7 @@ int process_exec(void *f_name) {
   char *file_name = f_name;
   bool success;
   int i;
-  char **argv = (char **)malloc (sizeof(char) * 128);
+  char **argv = (char *)malloc (sizeof(char) * 128);
   char *token, *save_ptr; // token화 하기 위한 변수
   int argc = 0;  // argument 개수
 
@@ -526,8 +526,6 @@ static bool load(const char *file_name, struct intr_frame *if_) {
   off_t file_ofs;
   bool success = false;
   int i;
-  
-  // filesys_lock_acquire();
 
   /* Allocate and activate page directory. */
   t->pml4 = pml4_create();
@@ -541,9 +539,9 @@ static bool load(const char *file_name, struct intr_frame *if_) {
   }
 
   /* Open executable file. */
-  // printf("[*] opening file %s\n", file_name);
   file = filesys_open(file_name);
   if (file == NULL) {
+    file_close(file);
     printf("load: %s: open failed\n", file_name);
     goto done;
   }
@@ -552,17 +550,17 @@ static bool load(const char *file_name, struct intr_frame *if_) {
   file_deny_write(file); // 실행 중인 파일은 수정할 수 없다.
 
   /* Read and verify executable header. */
-  // lock_acquire(inode_get_lock(file_get_inode(file)));
+  lock_acquire(inode_get_lock(file_get_inode(file)));
   if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr ||
       memcmp(ehdr.e_ident, "\177ELF\2\1\1", 7) || ehdr.e_type != 2 ||
       ehdr.e_machine != 0x3E // amd64
       || ehdr.e_version != 1 || ehdr.e_phentsize != sizeof(struct Phdr) ||
       ehdr.e_phnum > 1024) {
-    // lock_release(inode_get_lock(file_get_inode(file)));
+    lock_release(inode_get_lock(file_get_inode(file)));
     printf("load: %s: error loading executable\n", file_name);
     goto done;
   }
-  // lock_release(inode_get_lock(file_get_inode(file)));
+  lock_release(inode_get_lock(file_get_inode(file)));
 
   /* Read program headers. */
   file_ofs = ehdr.e_phoff;
@@ -573,12 +571,12 @@ static bool load(const char *file_name, struct intr_frame *if_) {
       goto done;
     file_seek(file, file_ofs);
 
-    // lock_acquire(inode_get_lock(file_get_inode(file)));
+    lock_acquire(inode_get_lock(file_get_inode(file)));
     if (file_read(file, &phdr, sizeof phdr) != sizeof phdr) {
-      // lock_release(inode_get_lock(file_get_inode(file)));
+      lock_release(inode_get_lock(file_get_inode(file)));
       goto done;
     }
-    // lock_release(inode_get_lock(file_get_inode(file)));
+    lock_release(inode_get_lock(file_get_inode(file)));
     file_ofs += sizeof phdr;
     switch (phdr.p_type) {
     case PT_NULL:
@@ -634,7 +632,7 @@ static bool load(const char *file_name, struct intr_frame *if_) {
 
 done:
   /* We arrive here whether the load is successful or not. */
-  // filesys_lock_release();
+  // file_close(file); load에서 file을 닫으면 lock이 풀린다.
   return success;
 }
 

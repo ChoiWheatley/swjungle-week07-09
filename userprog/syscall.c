@@ -112,7 +112,7 @@ void syscall_handler(struct intr_frame *f UNUSED) {
       f->R.rax = fork((void *)f->R.rdi);
       break;
     case SYS_EXEC:
-      f->R.rax = exec((void *)f->R.rdi);
+      exec((void *)f->R.rdi);
       break;
     case SYS_WAIT:
       f->R.rax = wait(f->R.rdi);
@@ -203,11 +203,7 @@ int exec(const char *file) {
   memcpy((void *)page, file, strlen(file) + 1);
 
   int success = process_exec((void *)page);
-  if (success == -1) {
-    // free page if unsuccesful
-    // printf("[*] ☠️ process_exec() failed\n");
-    palloc_free_page(page);
-  }
+  // free page if unsuccesful
 
   return success;
 }
@@ -255,7 +251,6 @@ int open(const char *file) {
   if (fd == -1) {
     file_close(file_obj);
   }
-  file_set_name(file_obj, file);
   return fd;
 }
 
@@ -412,7 +407,6 @@ void close(int fd) {
     return;
   }
   delete_file_from_fd_table(fd);
-  printf("[*] 📴 \"%s\" closed (%s)\n", file_get_name(file), thread_current()->name);
   file_close(file);
 }
 
@@ -469,6 +463,10 @@ static bool lazy_load_file(struct page *page, void *aux) {
   memset(upage + read_bytes, 0, zero_bytes);
 
   free(aux); // 인자 (malloc) free 수행
+  
+  // set not dirty: 파일 내용을 복사하면서 dirty로 체크됨.
+  // 이를 해제해두면 memeory에 데이터가 쓸때 dirty가 체크되므로 수정여부를 판단 가능
+  pml4_set_dirty(thread_current()->pml4, page->va, false);
 
   return true;
 }
