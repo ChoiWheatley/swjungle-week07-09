@@ -1,7 +1,10 @@
 #!/bin/bash
 
-# Command to run (replace this with your command)
-command_to_run="make clean; make -j; cd build; pintos -v -k -T 60 -m 20   --fs-disk=10 -p tests/filesys/base/syn-write:syn-write -p tests/filesys/base/child-syn-wrt:child-syn-wrt -- -q   -f run syn-write"
+test="tests/userprog/exec-read"
+cdpath="vm/build"
+command_to_run="make clean; make -j; make $test.result"
+
+cd $cdpath
 
 # Run the command in a loop until it returns a non-zero exit code
 while true; do

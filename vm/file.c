@@ -40,18 +40,23 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 /* Swap in the page by read contents from the file. */
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
+	filesys_lock_acquire();
 	struct file_page *file_page UNUSED = &page->file;
+	filesys_lock_release();
 }
 
 /* Swap out the page by writeback contents to the file. */
 static bool
 file_backed_swap_out (struct page *page) {
+	filesys_lock_acquire();
 	struct file_page *file_page UNUSED = &page->file;
+	filesys_lock_release();
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
 static void
 file_backed_destroy (struct page *page) {
+	filesys_lock_acquire();
 	struct file_page *file_page UNUSED = &page->file;
 	struct thread *cur = thread_current();
 	// dirty bit를 확인해서, 변경된 기록이 있으면 파일에 내용을 쓰고 destory 수행
@@ -60,6 +65,7 @@ file_backed_destroy (struct page *page) {
 		file_write(page->file.file, page->va, page->file.read_bytes);
 	}
 	file_close(page->file.file);
+	filesys_lock_release();
 }
 
 /* Do the mmap */
