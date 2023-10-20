@@ -41,13 +41,12 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 /* Swap in the page by read contents from the file. */
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
+	bool success = false;
 	struct file_page *file_page UNUSED = &page->file;
-	if (page->frame == NULL) {
-		return false;
-	}
 
 	ASSERT (file_page->file != NULL);
 	ASSERT (page->frame != NULL);
+	ASSERT (page->frame->kva == kva);
 
 	// kva에 file의 내용을 읽어온다
 	filesys_lock_acquire();
@@ -55,13 +54,17 @@ file_backed_swap_in (struct page *page, void *kva) {
 	if (file_read(file_page->file, kva, file_page->read_bytes) !=
 			file_page->read_bytes) {
 		filesys_lock_release();
-		return false;
+		goto done;
 	}
+	memset(kva + file_page->read_bytes, 0, file_page->zero_bytes);
 	filesys_lock_release();
 
 	pml4_set_page(thread_current()->pml4, page->va, page->frame->kva,
 			page->file.writable);
-	return true;
+	success = true;
+
+	done:
+		return success;
 }
 
 /* Swap out the page by writeback contents to the file. */
@@ -69,6 +72,7 @@ static bool
 file_backed_swap_out (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
 	if (pml4_is_dirty(thread_current()->pml4, page->va) == false) {
+		pml4_clear_page(thread_current()->pml4, page->va);
 		return true;
 	}
 
@@ -100,20 +104,28 @@ file_backed_destroy (struct page *page) {
 	ASSERT (file_page->file != NULL);
 
 	filesys_lock_acquire();
+	lock_acquire(inode_get_lock(file_get_inode(file_page->file)));
 	// dirty bit를 확인해서, 변경된 기록이 있으면 파일에 내용을 쓰고 destory 수행
 	if (pml4_is_dirty(cur->pml4, page->va)) {
 		file_seek(page->file.file, page->file.ofs);
 		file_write(page->file.file, page->va, page->file.read_bytes);
 	}
+	lock_release(inode_get_lock(file_get_inode(file_page->file)));
+	filesys_lock_release();
+
 	// file의 첫번째 페이지일 경우 file을 닫는다
 	if (file_page->connected_page_idx == 0) {
 		for (size_t i = 1; i < file_page->connected_page_idx; i++) {
 			struct page *p = spt_find_page(&cur->spt, page->va + i * PGSIZE);
 			spt_remove_page(&cur->spt, p);
 		}
+		filesys_lock_acquire();
 		file_close(file_page->file);
+		filesys_lock_release();
 	}
-	filesys_lock_release();
+
+	page->frame->page = NULL;
+	page->frame = NULL;
 }
 
 /* Do the mmap */
