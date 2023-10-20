@@ -32,38 +32,34 @@ vm_anon_init (void) {
 
 	filesys_lock_acquire();
 	swap_disk = disk_get(1, 1);
-	pg_cnt = disk_size(swap_disk) / (8 * DISK_SECTOR_SIZE);
+	pg_cnt = disk_size(swap_disk) / 8;
 	swap_bitmap = bitmap_create(pg_cnt);
 	filesys_lock_release();
 }
 
 /* Initialize the file mapping */
 bool anon_initializer(struct page *page, enum vm_type type, void *kva) {
-  /* Set up the handler */
-	bool success = false;
-  // FIXME 현재 page는 uninit_page로 초기화된 상태. 이걸 anon_page로 캐스팅 해도
-  // 되나?
-  struct anon_page *anon_page = &page->anon; 
+  if (type != VM_ANON || page->frame->kva != kva) {
+    return false;
+  }
 
-	ASSERT (type == VM_ANON);
+  /* Set up the handler */
+  struct anon_page *anon_page = &page->anon; 
+	page->operations = &anon_ops;
 
 	// TODO - do something with kva
-
-	page->operations = &anon_ops;
-	// page->frame->kva = kva;
+  anon_page->area = -1;
 	page->anon = *anon_page; // FIXME 위의 FIXME에서 이어짐.
-	
-	ASSERT (page == page->frame->page);
-	success = true;
-	
-	return success;
+
+	return true;
 }
 
 /* Swap in the page by read contents from the swap disk. */
 static bool
 anon_swap_in (struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
-	if (anon_page->area != -1 || page->frame == NULL) {
+	if (anon_page->area == -1 || page->frame == NULL) {
+    printf("[*] swap_in failed!: %p\n", page->va);
 		return false;
 	}
 
@@ -111,7 +107,9 @@ anon_destroy (struct page *page) {
 	filesys_lock_acquire();
 	struct anon_page *anon_page = &page->anon;
 	if (page->frame != NULL) {
-		free(page->frame);
+    // frame을 삭제하지 않고 frame table에 놔둬서 다른 page가 사용할 수 있도록 한다.
+    page->frame->page = NULL;
+    page->frame = NULL;
 	}
 	filesys_lock_release();
 }
