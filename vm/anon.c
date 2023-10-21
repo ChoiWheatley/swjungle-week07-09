@@ -104,12 +104,17 @@ anon_swap_out (struct page *page) {
 /* Destroy the anonymous page. PAGE will be freed by the caller. */
 static void
 anon_destroy (struct page *page) {
+  if (page->frame == NULL) {
+    return;
+  }
+
 	filesys_lock_acquire();
 	struct anon_page *anon_page = &page->anon;
-	if (page->frame != NULL) {
-    // frame을 삭제하지 않고 frame table에 놔둬서 다른 page가 사용할 수 있도록 한다.
-    page->frame->page = NULL;
-    page->frame = NULL;
-	}
+  // frame을 삭제하지 않고 frame table에 놔둬서 다른 page가 사용할 수 있도록 한다.
+  page->frame->ref_cnt -= 1;
+  page->frame->page = NULL;
+  page->frame = NULL;
 	filesys_lock_release();
+
+  pml4_clear_page(thread_current()->pml4, page->va);
 }
