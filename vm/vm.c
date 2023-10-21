@@ -171,7 +171,10 @@ vm_evict_frame (void) {
     return victim;
   }
 
+  // page와 frame을 분리
   swap_out(victim->page);
+  pml4_clear_page(thread_current()->pml4, victim->page->va);
+  victim->ref_cnt -= 1;
   victim->page->frame = NULL;
   victim->page = NULL;
 
@@ -218,7 +221,23 @@ vm_stack_growth (void *addr UNUSED) {
 /* Handle the fault on write_protected page */
 static bool
 vm_handle_wp (struct page *page UNUSED) {
-  // TODO 어떻게 활용할까?
+  if (page->writable == false) {
+    return false;
+  }
+
+  ASSERT (page->writable == true);
+
+  // 페이지의 주인이 아니다 (자식 프로세스다)
+  struct frame *frame = vm_get_frame();
+  memcpy(frame->kva, page->frame->kva, PGSIZE);
+
+  page->frame = frame;
+  frame->page = page;
+  frame->ref_cnt += 1;
+
+  pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable); // cow
+
+  return true;
 }
 
 /* Return true on success */
@@ -236,11 +255,10 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
   // printf("[*] 💥 fault_address: %p\n", addr);
 
   if ((page = spt_find_page(spt, upage_entry)) != NULL) {
-    if (page->frame != NULL && page->writable == false && write == true) {
-      // 쓰기 불가능한 페이지에 쓰려고 하면 false 반환
-      // TODO vm_handle_wp를 활용해야 할것 같은데 방법이 떠오르지 않는다.
-      return false;
+    if (page->frame != NULL && write == true) {
+      return vm_handle_wp(page);
     }
+
     // case 1. file-backed, case 2. swap-out, case 3. first stack
     if (vm_do_claim_page(page)) {
       return true;
@@ -251,6 +269,12 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
       // stack growth with legitimate stack pointer
       // `CALL` 명령과 함께 rsp가 증가한 상태로 page fault가 발생해야만 OK
       vm_stack_growth(upage_entry);
+      struct page *_p = spt_find_page(spt, upage_entry);
+      if (_p != NULL) {
+        pml4_clear_page(thread_current()->pml4, _p->va);
+        pml4_set_page(thread_current()->pml4, _p->va, _p->frame->kva, false); // cow
+      }
+
       return true;
     }
   }
@@ -306,7 +330,13 @@ vm_do_claim_page (struct page *page) {
     memset(frame->kva, 0, PGSIZE);
   }
 
-	return swap_in (page, frame->kva);
+  bool success = swap_in (page, frame->kva);
+  if (success) {
+    pml4_clear_page(thread_current()->pml4, page->va);
+    pml4_set_page(thread_current()->pml4, page->va, frame->kva, false); // cow
+  }
+
+	return success;
 }
 
 static bool page_less(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED) {
@@ -357,13 +387,17 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
       // 부모 페이지에 frame이 할당되어 있지 않으면 (fault 가 발생하지 않았으면) aux를 복사
       uint64_t aux_size = get_size_of_aux(p->uninit.aux);
       dup_p->uninit.aux = calloc(1, aux_size);
+
+      // TODO file duplicate 해서 넘겨주자
+      
       memcpy(dup_p->uninit.aux, p->uninit.aux, aux_size);
     } else {
-      // 부모 페이지에 frame이 이미 할당되어 있으면 (fault 가 이미 발생했으면) frame 내용을 복사
-      dup_p->frame = vm_get_frame();
-      ASSERT(dup_p->frame != NULL);
-      pml4_set_page(thread_current()->pml4, p->va, dup_p->frame->kva, p->writable);
-      memcpy(dup_p->frame->kva, p->frame->kva, PGSIZE);
+      // 부모 페이지에 frame이 이미 할당되어 있으면 (fault 가 이미 발생했으면) reference count만 증가
+      dup_p->frame = p->frame;
+      dup_p->frame->ref_cnt += 1;
+
+      // 전부 read only로 설정하고, 나중에 write가 발생하면 fault가 발생하도록 한다.
+      pml4_set_page(thread_current()->pml4, p->va, dup_p->frame->kva, false); // cow
     }
 
     hash_insert(&dst->page_map, &dup_p->hash_elem);
@@ -375,7 +409,8 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 
 static void vm_dealloc_page_each(struct hash_elem *e, void *aux UNUSED) {
   struct page *p = hash_entry(e, struct page, hash_elem);
-  vm_dealloc_page(p);
+  // destory가 호출되어도 frame을 free 시키지 않으므로 모든 페이지에 대해 dealloc page 수행 가능
+  vm_dealloc_page(p); 
 }
 
 /* Free the resource hold by the supplemental page table */
