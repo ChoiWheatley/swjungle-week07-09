@@ -135,6 +135,13 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 	vm_dealloc_page (page);
 }
 
+static bool frame_less (struct list_elem *a, struct list_elem *b) {
+  struct frame *frame_a = list_entry(a, struct frame, elem);
+  struct frame *frame_b = list_entry(b, struct frame, elem);
+
+  return frame_a->ref_cnt < frame_b->ref_cnt;
+}
+
 /* Get the struct frame, that will be evicted. */
 static struct frame *
 vm_get_victim (void) {
@@ -142,10 +149,9 @@ vm_get_victim (void) {
   if (list_empty(&frame_table)) {
     return NULL;
   }
-  // policy: FIFO
-  struct list_elem *victim_elem = list_pop_front(&frame_table);
-  list_push_back(&frame_table, victim_elem);
-	victim = list_entry(victim_elem, struct frame, elem);
+  // policy: ref_cnt가 가장 작은 frame을 victim으로 선정
+  struct list_elem *e = list_min(&frame_table, frame_less, NULL);
+  victim = list_entry(e, struct frame, elem);
 
 	return victim;
 }
@@ -187,6 +193,7 @@ vm_get_frame (void) {
   struct frame *frame = malloc(sizeof(struct frame));
   frame->kva = kva;
   frame->page = NULL;
+  frame->ref_cnt = 0;
 
   list_push_back(&frame_table, &frame->elem); // 생성한 frame 관리
 
@@ -290,6 +297,7 @@ vm_do_claim_page (struct page *page) {
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
+  frame->ref_cnt += 1;
 
   // anonymous 는 0으로 채워줘야 한다.
   if (page_get_type(page) == VM_ANON) {
