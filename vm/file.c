@@ -57,7 +57,7 @@ file_backed_swap_in (struct page *page, void *kva) {
 		filesys_lock_release();
 		goto done;
 	}
-	memset(kva + file_page->read_bytes, 0, file_page->zero_bytes);
+	memset((char *)kva + file_page->read_bytes, 0, file_page->zero_bytes);
 	lock_release(inode_get_lock(file_get_inode(file_page->file)));
 	filesys_lock_release();
 
@@ -115,17 +115,21 @@ file_backed_destroy (struct page *page) {
 	lock_release(inode_get_lock(file_get_inode(file_page->file)));
 	filesys_lock_release();
 
-	// file의 첫번째 페이지일 경우 file을 닫는다
+	// file의 첫번째 페이지일 경우 같은 file에 대한 모든 페이지를 삭제하고 file을 닫는다
 	if (file_page->connected_page_idx == 0) {
-		for (size_t i = 1; i < file_page->connected_page_idx; i++) {
+		for (size_t i = 1; i < file_page->connected_page_cnt; i++) {
 			struct page *p = spt_find_page(&cur->spt, page->va + i * PGSIZE);
-			spt_remove_page(&cur->spt, p);
+			if (p != NULL) {
+				spt_remove_page(&cur->spt, p);
+			}
 		}
-		filesys_lock_acquire();
-		file_close(file_page->file);
-		filesys_lock_release();
+		// TODO 안전하게 close할 방법을 찾아야 함.
+		// filesys_lock_acquire();
+		// file_close(file_page->file);
+		// filesys_lock_release();
 	}
 
+	pml4_clear_page(cur->pml4, page->va);
 	page->frame->page = NULL;
 	page->frame = NULL;
 }
