@@ -142,6 +142,13 @@ static bool frame_less (struct list_elem *a, struct list_elem *b) {
   return frame_a->ref_cnt < frame_b->ref_cnt;
 }
 
+static bool frame_less (struct list_elem *a, struct list_elem *b) {
+  struct frame *frame_a = list_entry(a, struct frame, elem);
+  struct frame *frame_b = list_entry(b, struct frame, elem);
+
+  return frame_a->ref_cnt < frame_b->ref_cnt;
+}
+
 /* Get the struct frame, that will be evicted. */
 static struct frame *
 vm_get_victim (void) {
