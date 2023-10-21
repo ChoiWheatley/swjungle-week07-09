@@ -8,6 +8,12 @@
 #include "userprog/process.h"
 #include <stdio.h>
 
+#include <string.h> // memcpy
+#include "threads/mmu.h" // pml4 set
+
+// frame table: victim 선청을 위한 자료구조
+struct list frame_table;
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void
@@ -20,6 +26,7 @@ vm_init (void) {
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
+  list_init(&frame_table);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -132,7 +139,13 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
-	 /* TODO: The policy for eviction is up to you. */
+  if (list_empty(&frame_table)) {
+    return NULL;
+  }
+  // policy: FIFO
+  struct list_elem *victim_elem = list_pop_front(&frame_table);
+  list_push_back(&frame_table, victim_elem);
+	victim = list_entry(victim_elem, struct frame, elem);
 
 	return victim;
 }
@@ -142,7 +155,17 @@ vm_get_victim (void) {
 static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
-	/* TODO: swap out the victim and return the evicted frame. */
+  if (victim == NULL) {
+    return NULL;
+  }
+  if (victim->page == NULL) {
+    // victim에 해당하는 frame이 할당된 page가 없다면 그냥 반환
+    return victim;
+  }
+
+  swap_out(victim->page);
+  victim->page->frame = NULL;
+  victim->page = NULL;
 
   ASSERT(victim != NULL);
 	return victim;
@@ -165,6 +188,8 @@ vm_get_frame (void) {
   frame->kva = kva;
   frame->page = NULL;
 
+  list_push_back(&frame_table, &frame->elem); // 생성한 frame 관리
+
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
 	return frame;
@@ -184,6 +209,7 @@ vm_stack_growth (void *addr UNUSED) {
 /* Handle the fault on write_protected page */
 static bool
 vm_handle_wp (struct page *page UNUSED) {
+  // TODO 어떻게 활용할까?
 }
 
 /* Return true on success */
@@ -201,6 +227,11 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
   // printf("[*] 💥 fault_address: %p\n", addr);
 
   if ((page = spt_find_page(spt, upage_entry)) != NULL) {
+    if (page->frame != NULL && page->writable == false && write == true) {
+      // 쓰기 불가능한 페이지에 쓰려고 하면 false 반환
+      // TODO vm_handle_wp를 활용해야 할것 같은데 방법이 떠오르지 않는다.
+      return false;
+    }
     // case 1. file-backed, case 2. swap-out, case 3. first stack
     if (vm_do_claim_page(page)) {
       return true;
@@ -312,14 +343,16 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
     dup_p = (struct page *)calloc(1, sizeof(struct page));
     memcpy(dup_p, p, sizeof(struct page));
 
-    if (p->frame == NULL) {
+    if (p->operations->type == VM_UNINIT) {
       // 부모 페이지에 frame이 할당되어 있지 않으면 (fault 가 발생하지 않았으면) aux를 복사
       uint64_t aux_size = get_size_of_aux(p->uninit.aux);
       dup_p->uninit.aux = calloc(1, aux_size);
       memcpy(dup_p->uninit.aux, p->uninit.aux, aux_size);
     } else {
       // 부모 페이지에 frame이 이미 할당되어 있으면 (fault 가 이미 발생했으면) frame 내용을 복사
-      vm_do_claim_page(dup_p);
+      dup_p->frame = vm_get_frame();
+      ASSERT(dup_p->frame != NULL);
+      pml4_set_page(thread_current()->pml4, p->va, dup_p->frame->kva, p->writable);
       memcpy(dup_p->frame->kva, p->frame->kva, PGSIZE);
     }
 
