@@ -20,8 +20,9 @@ test_main (void)
   msg ("memory is readable %d", *(int *) ACTUAL);
   msg ("memory is readable %d", *(int *) ACTUAL + 0x1000);
 
-  munmap (map);
+  munmap (map); // unmap the region
 
-  fail ("unmapped memory is readable (%d)", *(int *) (ACTUAL + 0x1000));
+  // NOTE should not be readable, fail 메시지를 출력하지 않고 곧바로 page fault가 발생해서 exit(-1)을 하게 만들어야 함.
+  fail ("unmapped memory is readable (%d)", *(int *) (ACTUAL + 0x1000)); 
   fail ("unmapped memory is readable (%d)", *(int *) (ACTUAL));
 }

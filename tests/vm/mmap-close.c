@@ -18,6 +18,7 @@ test_main (void)
   CHECK ((handle = open ("sample.txt")) > 1, "open \"sample.txt\"");
   CHECK ((map = mmap(ACTUAL, 4096, 0, handle, 0)) != MAP_FAILED, "mmap \"sample.txt\"");
 
+  // NOTE - fd를 닫는 행위가 mmapped 영역에게 영향을 주지 않는다
   close (handle);
 
   if (memcmp (ACTUAL, sample, strlen (sample)))

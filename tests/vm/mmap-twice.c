@@ -23,6 +23,7 @@ test_main (void)
     }
 
   for (i = 0; i < 2; i++)
+    // NOTE - 두 mmaped address들이 모두 같은 데이터를 담고 있는지 확인한다.
     CHECK (!memcmp (actual[i], sample, strlen (sample)),
            "compare mmap'd file %zu against data", i);
 }
