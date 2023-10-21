@@ -203,7 +203,6 @@ int exec(const char *file) {
   memcpy((void *)page, file, strlen(file) + 1);
 
   int success = process_exec((void *)page);
-  // free page if unsuccesful
 
   return success;
 }
@@ -258,6 +257,7 @@ int open(const char *file) {
  * @brief 열린 파일을 fd_table에 넣고 table의 index(fd)를 반환
  */
 int add_file_to_fd_table(struct file *file) {
+  filesys_lock_acquire();
 	struct thread *t = thread_current();
 	struct file **fdt = t->fd_table;
 	int i, fd = -1;
@@ -274,6 +274,7 @@ int add_file_to_fd_table(struct file *file) {
   if (i == FDCOUNT_LIMIT) {
     t->fd_idx = FDCOUNT_LIMIT;
   }
+  filesys_lock_release();
   return fd;
 }
 
@@ -336,9 +337,11 @@ int read(int fd, void *buffer, unsigned size) {
     }
 
     // exclusive read & write
-    lock_acquire(inode_get_lock(file_get_inode(filep))); 
+    // lock_acquire(inode_get_lock(file_get_inode(filep))); 
+    filesys_lock_acquire();
     read_count = file_read(filep, buffer, size);
-    lock_release(inode_get_lock(file_get_inode(filep)));
+    // lock_release(inode_get_lock(file_get_inode(filep)));
+    filesys_lock_release();
   }
 
   return read_count;
@@ -363,9 +366,9 @@ int write(int fd, const void *buffer, unsigned size) {
     }
 
     // exclusive read & write
-    lock_acquire(inode_get_lock(file_get_inode(filep)));
+    filesys_lock_acquire();
     write_count = file_write(filep, buffer, size);
-    lock_release(inode_get_lock(file_get_inode(filep)));
+    filesys_lock_release();
   }
   return write_count;
 }
@@ -377,11 +380,13 @@ void seek(int fd, unsigned position) {
   if (fd < 2) {
     return;
   }
+  filesys_lock_acquire();
   struct file *file = fd_to_file(fd);
   if (file == NULL) {
     return;
   }
   file_seek(file, position);
+	filesys_lock_release();
 }
 
 /**
@@ -428,6 +433,7 @@ int dup2(int oldfd, int newfd) { return 0; }
 // !SECTION - Project 2 USERPROG SYSTEM CALL
 
 static bool lazy_load_file(struct page *page, void *aux) {
+	filesys_lock_acquire();
   // cast to file from aux
   struct file_page *hand_in = aux;
 
@@ -458,6 +464,7 @@ static bool lazy_load_file(struct page *page, void *aux) {
 
   /* Load this page. */
   if (file_read(file, upage, read_bytes) != (int)read_bytes) {
+    filesys_lock_release();
     return false;
   }
   memset(upage + read_bytes, 0, zero_bytes);
@@ -468,6 +475,7 @@ static bool lazy_load_file(struct page *page, void *aux) {
   // 이를 해제해두면 memeory에 데이터가 쓸때 dirty가 체크되므로 수정여부를 판단 가능
   pml4_set_dirty(thread_current()->pml4, page->va, false);
 
+	filesys_lock_release();
   return true;
 }
 
@@ -483,37 +491,40 @@ static bool lazy_load_file(struct page *page, void *aux) {
  * @return void* 
  */
 void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
+  filesys_lock_acquire();
+
   // argument check
   // printf("addr: %p, length: %ld, writable: %d, fd: %d, offset: %ld\n", addr, length, writable, fd, offset);
+  void *ret = NULL;
 
   if (!is_user_vaddr(addr) || addr == NULL || pg_ofs(addr) != 0) {
     // bad addr
-    return NULL;
+    goto done;
   }
   if (fd == 0 || fd == 1) {
     // bad fd
-    return NULL;
+    goto done;
   }
   // overflow 발생으로 인해 length가 굉장히 큰 수가 되는 경우가 있다.
   // 비교연산에서도 addr + length를 수행하면 overflow가 다시 발생할 수 있으므로 각각의 경우를 나눠서 검사한다.
   if (length == 0 || (uint64_t)addr >= KERN_BASE - length || length >= KERN_BASE - (uint64_t)addr) {
     // bad length
-    return NULL;
+    goto done;
   }
   
   struct file *origin_file = fd_to_file(fd);
   if (origin_file == NULL) {
-    return NULL;
+    goto done;
   }
 
   struct file *file = file_duplicate(origin_file);
   if (file == NULL) {
     // bad file
-    return NULL;
+    goto done;
   }
   if (file_length(file) < offset || pg_ofs(offset) != 0) {
     // bad offset
-    return NULL;
+    goto done;
   }
 
   // file_length와 사용자가 요청하는 length의 괴리를 해소하기 위해 사용할 변수들
@@ -526,7 +537,7 @@ void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
     // check consecutive pages available
     if (spt_find_page(spt, addr + i * PGSIZE) != NULL) {
       // bad addr
-      return NULL;
+      goto done;
     }
   }
 
@@ -555,7 +566,7 @@ void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
     if (!vm_alloc_page_with_initializer(VM_FILE, upage, writable, lazy_load_file, file_page)) {
       // failed to claim page, this should never happen
       PANIC("failed to claim page\n");
-      return NULL;
+      goto done;
     }
 
     cursor += PGSIZE;
@@ -563,8 +574,12 @@ void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
     offset += read_bytes;
     idx += 1;
   }
+  
+  ret = addr; // OK
 
-  return addr;
+done:
+  filesys_lock_release();
+  return ret;
 }
 
 /**
