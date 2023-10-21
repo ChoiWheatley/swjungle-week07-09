@@ -219,6 +219,7 @@ static void __do_fork(void *aux) {
   // if (parent->fd_idx == FDCOUNT_LIMIT)
   //   goto error;
 
+  filesys_lock_acquire();
   for (int i = 2; i < FDCOUNT_LIMIT; i++) {
     if (parent->fd_table[i] != NULL) {
       current->fd_table[i] = file_duplicate(parent->fd_table[i]);
@@ -232,6 +233,7 @@ static void __do_fork(void *aux) {
 
   // NOTE - 부모가 실행하는 파일도 복사해서 활용해야 한다. -> COW에서 수정 필요.
   current->running = file_duplicate(parent->running);
+  filesys_lock_release();
 
   /* Finally, switch to the newly created process. */
   sema_up(&current->fork_sema);
