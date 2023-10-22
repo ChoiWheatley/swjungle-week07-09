@@ -2,6 +2,7 @@
 #define LONG_MODE (1 << 29)
 #define CR0_PE 0x00000001
 #define CR0_PG (1 << 31)
+#define CR0_WP 0x00010000      /* Write-Protect enable in kernel mode. */
 #define CR4_PAE 0x20
 #define PTE_P 0x1
 #define PTE_W 0x2
