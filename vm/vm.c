@@ -146,11 +146,20 @@ static bool frame_less (struct list_elem *a, struct list_elem *b) {
 static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
+  struct list_elem *e = NULL;
   if (list_empty(&frame_table)) {
-    return NULL;
+    return NULL; // TODO kernel panic?
   }
+
+  // // policy: FIFO
+  // e = list_pop_front(&frame_table);
+  // list_push_back(&frame_table, e);
+
   // policy: ref_cnt가 가장 작은 frame을 victim으로 선정
-  struct list_elem *e = list_min(&frame_table, frame_less, NULL);
+  e = list_min(&frame_table, frame_less, NULL);
+  list_remove(e);
+  list_push_back(&frame_table, e);
+
   victim = list_entry(e, struct frame, elem);
 
   ASSERT (victim->ref_cnt <= 1);
@@ -164,7 +173,7 @@ static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
   if (victim == NULL) {
-    return NULL;
+    return NULL; // TODO kernel panic?
   }
   if (victim->page == NULL) {
     // victim에 해당하는 frame이 할당된 page가 없다면 그냥 반환
@@ -225,17 +234,23 @@ vm_handle_wp (struct page *page UNUSED) {
     return false;
   }
 
-  ASSERT (page->writable == true);
+  if (page->frame->ref_cnt <= 1) {
+    // reference가 하나 (나 자신)이면 그대로 써도 된다.
+    pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, page->writable); // cow
+    return true;
+  }
 
-  // 페이지의 주인이 아니다 (자식 프로세스다)
-  struct frame *frame = vm_get_frame();
-  memcpy(frame->kva, page->frame->kva, PGSIZE);
+  struct frame *dup_frame = vm_get_frame();
+  memcpy(dup_frame->kva, page->frame->kva, PGSIZE);
 
-  page->frame = frame;
-  frame->page = page;
-  frame->ref_cnt += 1;
+  page->frame->ref_cnt -= 1; // unlink frame
 
-  pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable); // cow
+  // link page to frame
+  page->frame = dup_frame;
+  dup_frame->page = page;
+  dup_frame->ref_cnt += 1;
+
+  pml4_set_page(thread_current()->pml4, page->va, dup_frame->kva, page->writable); // cow
 
   return true;
 }
@@ -255,13 +270,11 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
   // printf("[*] 💥 fault_address: %p\n", addr);
 
   if ((page = spt_find_page(spt, upage_entry)) != NULL) {
-    if (page->frame != NULL && write == true) {
+    if (page->frame == NULL) {
+      return vm_do_claim_page(page);
+    } else {
+      ASSERT(write == true);
       return vm_handle_wp(page);
-    }
-
-    // case 1. file-backed, case 2. swap-out, case 3. first stack
-    if (vm_do_claim_page(page)) {
-      return true;
     }
   } else {
   	/* 여기서부터는 page가 존재하지 않는 요청에 대해 처리 수행 - 명시적인 할당 요청이 없었음 */
