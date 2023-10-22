@@ -284,8 +284,10 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
       vm_stack_growth(upage_entry);
       struct page *_p = spt_find_page(spt, upage_entry);
       if (_p != NULL) {
-        pml4_clear_page(thread_current()->pml4, _p->va);
+        // pml4_clear_page(thread_current()->pml4, _p->va);
         pml4_set_page(thread_current()->pml4, _p->va, _p->frame->kva, false); // cow
+      } else {
+        return false;
       }
 
       return true;
