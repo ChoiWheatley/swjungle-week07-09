@@ -58,13 +58,11 @@ file_backed_swap_in (struct page *page, void *kva) {
 	}
 	memset((char *)kva + file_page->read_bytes, 0, file_page->zero_bytes);
 
-	pml4_set_page(thread_current()->pml4, page->va, page->frame->kva,
-			page->file.writable);
 	success = true;
 
 	done:
-		filesys_lock_release();
 		lock_release(inode_get_lock(file_get_inode(file_page->file)));
+		filesys_lock_release();
 		return success;
 }
 

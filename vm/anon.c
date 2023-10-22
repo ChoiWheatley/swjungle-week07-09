@@ -73,8 +73,7 @@ anon_swap_in (struct page *page, void *kva) {
   anon_page->area = -1;
 	filesys_lock_release();
 
-  // thread_current의 pml4에 할당	
-	pml4_set_page(thread_current()->pml4, page->va, kva, page->writable);
+  return true;
 }
 
 /* Swap out the page by writing contents to the swap disk. */
