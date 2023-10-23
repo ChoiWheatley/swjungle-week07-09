@@ -156,9 +156,12 @@ vm_get_victim (void) {
   // e = list_pop_front(&frame_table);
   // list_push_back(&frame_table, e);
 
-  // policy: ref_cnt가 가장 작은 frame을 victim으로 선정
-  { 
-    // list_min 확장
+  {
+    /**
+     * @brief list_min extension
+     * @policy: ref_cnt가 가장 작은 frame을 victim으로 선정. 이때, ref_cnt가
+     * 1보다 작다면 빠르게 반복문을 나간다.
+     */
     if (min != list_end(list)) {
       struct list_elem *e;
 
