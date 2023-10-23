@@ -128,7 +128,7 @@ file_backed_destroy (struct page *page) {
 	// unlink frame을 직접 해주어야 한다.
 	pml4_clear_page(cur->pml4, page->va);
 	page->frame->ref_cnt -= 1;
-	page->frame->page = NULL;
+	list_remove(&page->frame_elem);
 	page->frame = NULL;
 }
 

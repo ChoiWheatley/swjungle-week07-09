@@ -51,6 +51,7 @@ struct page {
 	/* Your implementation */
 
 	struct hash_elem hash_elem; // hash element for supplemental page table
+	struct list_elem frame_elem; // list element for frame list
 	
 	char __unused[49];
 	
@@ -69,9 +70,10 @@ struct page {
 /* The representation of "frame" */
 struct frame {
 	void *kva; // kernel virtual address
-	struct page *page; // back reference for page
+	// struct page *page; // back reference for page
+	struct list page_list; // list element for page list
 	uint32_t ref_cnt; // reference count
-	struct list_elem elem // frame table element
+	struct list_elem elem; // frame table element
 };
 
 /* The function table for page operations.

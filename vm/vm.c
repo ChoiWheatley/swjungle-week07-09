@@ -175,18 +175,25 @@ vm_evict_frame (void) {
   if (victim == NULL) {
     return NULL; // TODO kernel panic?
   }
-  if (victim->page == NULL) {
-    // victim에 해당하는 frame이 할당된 page가 없다면 그냥 반환
+  
+  if (list_empty (&victim->page_list)) {
     return victim;
   }
 
   // page와 frame을 분리
-  swap_out(victim->page);
-  pml4_clear_page(thread_current()->pml4, victim->page->va);
-  victim->ref_cnt -= 1;
-  victim->page->frame = NULL;
-  victim->page = NULL;
+  while (!list_empty (&victim->page_list)) {
+    // swap out page element and unlink it
+    struct list_elem *e = list_pop_front (&victim->page_list);
+    struct page *page = list_entry(e, struct page, frame_elem);
+    
+    swap_out(page);
+    pml4_clear_page(thread_current()->pml4, page->va);
+    victim->ref_cnt -= 1;
+    page->frame = NULL;
+    list_remove(&page->frame_elem);
+  }
 
+  ASSERT(victim->ref_cnt == 0 && list_empty(&victim->page_list));
   ASSERT(victim != NULL);
 	return victim;
 }
@@ -206,13 +213,13 @@ vm_get_frame (void) {
   
   struct frame *frame = malloc(sizeof(struct frame));
   frame->kva = kva;
-  frame->page = NULL;
+  list_init(&frame->page_list);
   frame->ref_cnt = 0;
 
   list_push_back(&frame_table, &frame->elem); // 생성한 frame 관리
 
 	ASSERT (frame != NULL);
-	ASSERT (frame->page == NULL);
+	ASSERT (list_empty(&frame->page_list));
 	return frame;
 }
 
@@ -243,11 +250,13 @@ vm_handle_wp (struct page *page UNUSED) {
   struct frame *dup_frame = vm_get_frame();
   memcpy(dup_frame->kva, page->frame->kva, PGSIZE);
 
-  page->frame->ref_cnt -= 1; // unlink frame
+  // unlink frame
+  page->frame->ref_cnt -= 1; 
+  list_remove(&page->frame_elem);
 
   // link page to frame
   page->frame = dup_frame;
-  dup_frame->page = page;
+  list_push_back(&dup_frame->page_list, &page->frame_elem); // link page to frame
   dup_frame->ref_cnt += 1;
 
   pml4_set_page(thread_current()->pml4, page->va, dup_frame->kva, page->writable); // cow
@@ -336,7 +345,8 @@ vm_do_claim_page (struct page *page) {
   ASSERT (frame != NULL);
 
 	/* Set links */
-	frame->page = page;
+	// frame->page = page;
+  list_push_back(&frame->page_list, &page->frame_elem);
 	page->frame = frame;
   frame->ref_cnt += 1;
 
