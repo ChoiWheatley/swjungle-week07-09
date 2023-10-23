@@ -309,15 +309,20 @@ struct file *fd_to_file(int fd) {
  */
 int read(int fd, void *buffer, unsigned size) {
   check_address(buffer);
-
   uint8_t *buf = buffer;
   off_t read_count;
+  
+  if (size == 0) {
+    return 0;
+  }
 
   // check buffer address
   struct page *p = spt_find_page(&thread_current()->spt, pg_round_down(buffer));
   if (p == NULL || (p->writable == false)) {
     exit(-1);
   }
+  
+  // printf("[*] in syscall read, p->frame->kva = %p\n", p->frame->kva);
 
   if (fd == STDIN_FILENO) {  // STDIN일 때
     char key;
@@ -338,6 +343,7 @@ int read(int fd, void *buffer, unsigned size) {
 
     // exclusive read & write
     // lock_acquire(inode_get_lock(file_get_inode(filep))); 
+    *((char *) buffer) = '@'; // try to read to check if page fault occurs
     filesys_lock_acquire();
     read_count = file_read(filep, buffer, size);
     // lock_release(inode_get_lock(file_get_inode(filep)));
@@ -449,7 +455,7 @@ static bool lazy_load_file(struct page *page, void *aux) {
   size_t connected_page_idx = hand_in->connected_page_idx;
 
   // code segment registration
-  pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, writable);
+  pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, true);
 
   /* copy of load_segment when USERPROG */
   ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
@@ -470,6 +476,9 @@ static bool lazy_load_file(struct page *page, void *aux) {
   memset(upage + read_bytes, 0, zero_bytes);
 
   free(aux); // 인자 (malloc) free 수행
+
+  // code segment 원복
+  pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, writable);
   
   // set not dirty: 파일 내용을 복사하면서 dirty로 체크됨.
   // 이를 해제해두면 memeory에 데이터가 쓸때 dirty가 체크되므로 수정여부를 판단 가능

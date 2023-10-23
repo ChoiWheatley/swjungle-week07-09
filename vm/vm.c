@@ -146,7 +146,8 @@ static bool frame_less (struct list_elem *a, struct list_elem *b) {
 static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
-  struct list_elem *e = NULL;
+  struct list *list = &frame_table;
+  struct list_elem *min = list_begin(list);
   if (list_empty(&frame_table)) {
     return NULL; // TODO kernel panic?
   }
@@ -155,14 +156,31 @@ vm_get_victim (void) {
   // e = list_pop_front(&frame_table);
   // list_push_back(&frame_table, e);
 
-  // policy: ref_cnt가 가장 작은 frame을 victim으로 선정
-  e = list_min(&frame_table, frame_less, NULL);
-  list_remove(e);
-  list_push_back(&frame_table, e);
+  {
+    /**
+     * @brief list_min extension
+     * @policy: ref_cnt가 가장 작은 frame을 victim으로 선정. 이때, ref_cnt가
+     * 1보다 작다면 빠르게 반복문을 나간다.
+     */
+    if (min != list_end(list)) {
+      struct list_elem *e;
 
-  victim = list_entry(e, struct frame, elem);
+      for (e = list_next(min); e != list_end(list); e = list_next(e)) {
+        struct frame *frame = list_entry(e, struct frame, elem);
+        if (frame->ref_cnt <= 1) {
+          min = &frame->elem;
+          break;
+        }
+        if (frame_less(min, &frame->elem)) {
+          min = &frame->elem;
+        }
+      }
+    }
+  }
+  list_remove(min);
+  list_push_back(&frame_table, min);
 
-  ASSERT (victim->ref_cnt <= 1);
+  victim = list_entry(min, struct frame, elem);
 
 	return victim;
 }
@@ -175,18 +193,21 @@ vm_evict_frame (void) {
   if (victim == NULL) {
     return NULL; // TODO kernel panic?
   }
-  if (victim->page == NULL) {
-    // victim에 해당하는 frame이 할당된 page가 없다면 그냥 반환
-    return victim;
+  
+  // page와 frame을 분리
+  while (!list_empty (&victim->page_list)) {
+    // swap out page element and unlink it
+    struct list_elem *e = list_pop_front (&victim->page_list);
+    struct page *page = list_entry(e, struct page, frame_elem);
+    
+    swap_out(page);
+    pml4_clear_page(thread_current()->pml4, page->va);
+    victim->ref_cnt -= 1;
+    page->frame = NULL;
+    list_remove(&page->frame_elem);
   }
 
-  // page와 frame을 분리
-  swap_out(victim->page);
-  pml4_clear_page(thread_current()->pml4, victim->page->va);
-  victim->ref_cnt -= 1;
-  victim->page->frame = NULL;
-  victim->page = NULL;
-
+  ASSERT(victim->ref_cnt == 0 && list_empty(&victim->page_list));
   ASSERT(victim != NULL);
 	return victim;
 }
@@ -204,15 +225,15 @@ vm_get_frame (void) {
 		return vm_evict_frame();
 	}
   
-  struct frame *frame = malloc(sizeof(struct frame));
+  struct frame *frame = calloc(1, sizeof(struct frame));
   frame->kva = kva;
-  frame->page = NULL;
+  list_init(&frame->page_list);
   frame->ref_cnt = 0;
 
   list_push_back(&frame_table, &frame->elem); // 생성한 frame 관리
 
 	ASSERT (frame != NULL);
-	ASSERT (frame->page == NULL);
+	ASSERT (list_empty(&frame->page_list));
 	return frame;
 }
 
@@ -243,11 +264,13 @@ vm_handle_wp (struct page *page UNUSED) {
   struct frame *dup_frame = vm_get_frame();
   memcpy(dup_frame->kva, page->frame->kva, PGSIZE);
 
-  page->frame->ref_cnt -= 1; // unlink frame
+  // unlink frame
+  page->frame->ref_cnt -= 1; 
+  list_remove(&page->frame_elem);
 
   // link page to frame
   page->frame = dup_frame;
-  dup_frame->page = page;
+  list_push_back(&dup_frame->page_list, &page->frame_elem); // link page to frame
   dup_frame->ref_cnt += 1;
 
   pml4_set_page(thread_current()->pml4, page->va, dup_frame->kva, page->writable); // cow
@@ -284,8 +307,10 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
       vm_stack_growth(upage_entry);
       struct page *_p = spt_find_page(spt, upage_entry);
       if (_p != NULL) {
-        pml4_clear_page(thread_current()->pml4, _p->va);
+        // pml4_clear_page(thread_current()->pml4, _p->va);
         pml4_set_page(thread_current()->pml4, _p->va, _p->frame->kva, false); // cow
+      } else {
+        return false;
       }
 
       return true;
@@ -334,7 +359,8 @@ vm_do_claim_page (struct page *page) {
   ASSERT (frame != NULL);
 
 	/* Set links */
-	frame->page = page;
+	// frame->page = page;
+  list_push_back(&frame->page_list, &page->frame_elem);
 	page->frame = frame;
   frame->ref_cnt += 1;
 
@@ -345,7 +371,6 @@ vm_do_claim_page (struct page *page) {
 
   bool success = swap_in (page, frame->kva);
   if (success) {
-    pml4_clear_page(thread_current()->pml4, page->va);
     pml4_set_page(thread_current()->pml4, page->va, frame->kva, false); // cow
   }
 

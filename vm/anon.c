@@ -59,7 +59,7 @@ static bool
 anon_swap_in (struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
 	if (anon_page->area == -1 || page->frame == NULL) {
-    printf("[*] swap_in failed!: %p\n", page->va);
+    // printf("[*] swap_in failed!: %p\n", page->va);
 		return false;
 	}
 
@@ -115,6 +115,6 @@ anon_destroy (struct page *page) {
   // unlink frame을 직접 해주어야 한다.
   pml4_clear_page(thread_current()->pml4, page->va);
   page->frame->ref_cnt -= 1;
-  page->frame->page = NULL;
+  list_remove(&page->frame_elem);
   page->frame = NULL;
 }

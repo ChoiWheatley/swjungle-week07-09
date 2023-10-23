@@ -20,6 +20,7 @@ main (int argc, char *argv[])
   size_t i;
 
   /* Encrypt zeros. */
+  // printf("[*] encrypting zeros\n");
   arc4_init (&arc4, key, strlen (key));
   arc4_crypt (&arc4, buf, SIZE);
 
