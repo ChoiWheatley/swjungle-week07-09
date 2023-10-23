@@ -194,10 +194,6 @@ vm_evict_frame (void) {
     return NULL; // TODO kernel panic?
   }
   
-  if (list_empty (&victim->page_list)) {
-    return victim;
-  }
-
   // page와 frame을 분리
   while (!list_empty (&victim->page_list)) {
     // swap out page element and unlink it
