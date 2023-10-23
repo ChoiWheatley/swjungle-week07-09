@@ -10,7 +10,7 @@
 
 #define CHUNK_SIZE (128 * 1024)
 
-static char buffer[2048];
+static char buffer[CHUNK_SIZE + 1];
 
 void
 test_main (void)
@@ -49,7 +49,7 @@ test_main (void)
 	
 	CHECK ((handle = open("sample.txt")) > 1, "open \"sample.txt\"");
 	
-	CHECK (read(handle, buffer, 2048) > 1, "부모: read \"sample.txt\"");
+	CHECK (read(handle, buffer, CHUNK_SIZE) > 1, "부모: read \"sample.txt\"");
 	printf("[*] parent read data: %s\n", buffer);
 
 	pa_parent = get_phys_addr((void *) buffer);
@@ -65,7 +65,7 @@ test_main (void)
           "two phys addrs should be the same. (%p), (%p)", pa_parent, pa_child);
 
 		seek(handle, 0);
-    CHECK (read(handle, buffer, 2048) > 1, "자식: read \"sample.txt\" 읽는다.");
+    CHECK (read(handle, buffer, CHUNK_SIZE) > 1, "자식: read \"sample.txt\" 읽는다.");
 		
 		printf("read bytes: %s\n", buffer);
 		

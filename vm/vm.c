@@ -347,7 +347,6 @@ vm_do_claim_page (struct page *page) {
 
   bool success = swap_in (page, frame->kva);
   if (success) {
-    pml4_clear_page(thread_current()->pml4, page->va);
     pml4_set_page(thread_current()->pml4, page->va, frame->kva, false); // cow
   }
 

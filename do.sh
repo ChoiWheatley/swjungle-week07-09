@@ -48,4 +48,4 @@ cd build
 
 ### COW 
 #
-pintos $1 -v -k -m 20 --fs-disk=10 -p tests/vm/cow/cow-simple:cow-simple  -p ../../tests/userprog/sample.txt:sample.txt --swap-disk=4 -- -q   -f run cow-simple
+pintos $1 -v -k -m 20 --fs-disk=10 -p tests/vm/cow/cow-simple:cow-simple  -p ../../tests/vm/large.txt:sample.txt --swap-disk=4 -- -q   -f run cow-simple

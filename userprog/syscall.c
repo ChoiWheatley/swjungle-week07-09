@@ -311,6 +311,10 @@ int read(int fd, void *buffer, unsigned size) {
   check_address(buffer);
   uint8_t *buf = buffer;
   off_t read_count;
+  
+  if (size == 0) {
+    return 0;
+  }
 
   // check buffer address
   struct page *p = spt_find_page(&thread_current()->spt, pg_round_down(buffer));
@@ -318,7 +322,7 @@ int read(int fd, void *buffer, unsigned size) {
     exit(-1);
   }
   
-  printf("[*] in syscall read, p->frame->kva = %p\n", p->frame->kva);
+  // printf("[*] in syscall read, p->frame->kva = %p\n", p->frame->kva);
 
   if (fd == STDIN_FILENO) {  // STDIN일 때
     char key;
@@ -339,6 +343,7 @@ int read(int fd, void *buffer, unsigned size) {
 
     // exclusive read & write
     // lock_acquire(inode_get_lock(file_get_inode(filep))); 
+    *((char *) buffer) = '@'; // try to read to check if page fault occurs
     filesys_lock_acquire();
     read_count = file_read(filep, buffer, size);
     // lock_release(inode_get_lock(file_get_inode(filep)));
