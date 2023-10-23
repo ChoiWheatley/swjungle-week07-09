@@ -146,7 +146,8 @@ static bool frame_less (struct list_elem *a, struct list_elem *b) {
 static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
-  struct list_elem *e = NULL;
+  struct list *list = &frame_table;
+  struct list_elem *min = list_begin(list);
   if (list_empty(&frame_table)) {
     return NULL; // TODO kernel panic?
   }
@@ -156,13 +157,27 @@ vm_get_victim (void) {
   // list_push_back(&frame_table, e);
 
   // policy: ref_cnt가 가장 작은 frame을 victim으로 선정
-  e = list_min(&frame_table, frame_less, NULL);
-  list_remove(e);
-  list_push_back(&frame_table, e);
+  { 
+    // list_min 확장
+    if (min != list_end(list)) {
+      struct list_elem *e;
 
-  victim = list_entry(e, struct frame, elem);
+      for (e = list_next(min); e != list_end(list); e = list_next(e)) {
+        struct frame *frame = list_entry(e, struct frame, elem);
+        if (frame->ref_cnt <= 1) {
+          min = &frame->elem;
+          break;
+        }
+        if (frame_less(min, &frame->elem)) {
+          min = &frame->elem;
+        }
+      }
+    }
+  }
+  list_remove(min);
+  list_push_back(&frame_table, min);
 
-  ASSERT (victim->ref_cnt <= 1);
+  victim = list_entry(min, struct frame, elem);
 
 	return victim;
 }
@@ -211,7 +226,7 @@ vm_get_frame (void) {
 		return vm_evict_frame();
 	}
   
-  struct frame *frame = malloc(sizeof(struct frame));
+  struct frame *frame = calloc(1, sizeof(struct frame));
   frame->kva = kva;
   list_init(&frame->page_list);
   frame->ref_cnt = 0;
