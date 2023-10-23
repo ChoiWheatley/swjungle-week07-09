@@ -58,13 +58,11 @@ file_backed_swap_in (struct page *page, void *kva) {
 	}
 	memset((char *)kva + file_page->read_bytes, 0, file_page->zero_bytes);
 
-	pml4_set_page(thread_current()->pml4, page->va, page->frame->kva,
-			page->file.writable);
 	success = true;
 
 	done:
-		filesys_lock_release();
 		lock_release(inode_get_lock(file_get_inode(file_page->file)));
+		filesys_lock_release();
 		return success;
 }
 
@@ -88,7 +86,6 @@ file_backed_swap_out (struct page *page) {
 	lock_release(inode_get_lock(file_get_inode(file_page->file)));
 	filesys_lock_release();
 
-	pml4_clear_page(thread_current()->pml4, page->va);
 	return true;
 }
 
@@ -128,8 +125,10 @@ file_backed_destroy (struct page *page) {
 		// filesys_lock_release();
 	}
 
+	// unlink frame을 직접 해주어야 한다.
 	pml4_clear_page(cur->pml4, page->va);
-	page->frame->page = NULL;
+	page->frame->ref_cnt -= 1;
+	list_remove(&page->frame_elem);
 	page->frame = NULL;
 }
 

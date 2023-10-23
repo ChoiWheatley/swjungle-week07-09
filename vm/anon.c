@@ -59,7 +59,7 @@ static bool
 anon_swap_in (struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
 	if (anon_page->area == -1 || page->frame == NULL) {
-    printf("[*] swap_in failed!: %p\n", page->va);
+    // printf("[*] swap_in failed!: %p\n", page->va);
 		return false;
 	}
 
@@ -73,8 +73,7 @@ anon_swap_in (struct page *page, void *kva) {
   anon_page->area = -1;
 	filesys_lock_release();
 
-  // thread_current의 pml4에 할당	
-	pml4_set_page(thread_current()->pml4, page->va, kva, page->writable);
+  return true;
 }
 
 /* Swap out the page by writing contents to the swap disk. */
@@ -98,18 +97,24 @@ anon_swap_out (struct page *page) {
   }
 	filesys_lock_release();
 
-  pml4_clear_page(thread_current()->pml4, page->va);
+  return true;
 }
 
 /* Destroy the anonymous page. PAGE will be freed by the caller. */
 static void
 anon_destroy (struct page *page) {
+  if (page->frame == NULL) {
+    return;
+  }
+
 	filesys_lock_acquire();
 	struct anon_page *anon_page = &page->anon;
-	if (page->frame != NULL) {
-    // frame을 삭제하지 않고 frame table에 놔둬서 다른 page가 사용할 수 있도록 한다.
-    page->frame->page = NULL;
-    page->frame = NULL;
-	}
+  // frame을 삭제하지 않고 frame table에 놔둬서 다른 page가 사용할 수 있도록 한다.
 	filesys_lock_release();
+
+  // unlink frame을 직접 해주어야 한다.
+  pml4_clear_page(thread_current()->pml4, page->va);
+  page->frame->ref_cnt -= 1;
+  list_remove(&page->frame_elem);
+  page->frame = NULL;
 }

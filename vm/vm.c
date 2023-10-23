@@ -135,17 +135,52 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 	vm_dealloc_page (page);
 }
 
+static bool frame_less (struct list_elem *a, struct list_elem *b) {
+  struct frame *frame_a = list_entry(a, struct frame, elem);
+  struct frame *frame_b = list_entry(b, struct frame, elem);
+
+  return frame_a->ref_cnt < frame_b->ref_cnt;
+}
+
 /* Get the struct frame, that will be evicted. */
 static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
+  struct list *list = &frame_table;
+  struct list_elem *min = list_begin(list);
   if (list_empty(&frame_table)) {
-    return NULL;
+    return NULL; // TODO kernel panic?
   }
-  // policy: FIFO
-  struct list_elem *victim_elem = list_pop_front(&frame_table);
-  list_push_back(&frame_table, victim_elem);
-	victim = list_entry(victim_elem, struct frame, elem);
+
+  // // policy: FIFO
+  // e = list_pop_front(&frame_table);
+  // list_push_back(&frame_table, e);
+
+  {
+    /**
+     * @brief list_min extension
+     * @policy: ref_cnt가 가장 작은 frame을 victim으로 선정. 이때, ref_cnt가
+     * 1보다 작다면 빠르게 반복문을 나간다.
+     */
+    if (min != list_end(list)) {
+      struct list_elem *e;
+
+      for (e = list_next(min); e != list_end(list); e = list_next(e)) {
+        struct frame *frame = list_entry(e, struct frame, elem);
+        if (frame->ref_cnt <= 1) {
+          min = &frame->elem;
+          break;
+        }
+        if (frame_less(min, &frame->elem)) {
+          min = &frame->elem;
+        }
+      }
+    }
+  }
+  list_remove(min);
+  list_push_back(&frame_table, min);
+
+  victim = list_entry(min, struct frame, elem);
 
 	return victim;
 }
@@ -156,17 +191,23 @@ static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
   if (victim == NULL) {
-    return NULL;
+    return NULL; // TODO kernel panic?
   }
-  if (victim->page == NULL) {
-    // victim에 해당하는 frame이 할당된 page가 없다면 그냥 반환
-    return victim;
+  
+  // page와 frame을 분리
+  while (!list_empty (&victim->page_list)) {
+    // swap out page element and unlink it
+    struct list_elem *e = list_pop_front (&victim->page_list);
+    struct page *page = list_entry(e, struct page, frame_elem);
+    
+    swap_out(page);
+    pml4_clear_page(thread_current()->pml4, page->va);
+    victim->ref_cnt -= 1;
+    page->frame = NULL;
+    list_remove(&page->frame_elem);
   }
 
-  swap_out(victim->page);
-  victim->page->frame = NULL;
-  victim->page = NULL;
-
+  ASSERT(victim->ref_cnt == 0 && list_empty(&victim->page_list));
   ASSERT(victim != NULL);
 	return victim;
 }
@@ -184,14 +225,15 @@ vm_get_frame (void) {
 		return vm_evict_frame();
 	}
   
-  struct frame *frame = malloc(sizeof(struct frame));
+  struct frame *frame = calloc(1, sizeof(struct frame));
   frame->kva = kva;
-  frame->page = NULL;
+  list_init(&frame->page_list);
+  frame->ref_cnt = 0;
 
   list_push_back(&frame_table, &frame->elem); // 생성한 frame 관리
 
 	ASSERT (frame != NULL);
-	ASSERT (frame->page == NULL);
+	ASSERT (list_empty(&frame->page_list));
 	return frame;
 }
 
@@ -209,7 +251,31 @@ vm_stack_growth (void *addr UNUSED) {
 /* Handle the fault on write_protected page */
 static bool
 vm_handle_wp (struct page *page UNUSED) {
-  // TODO 어떻게 활용할까?
+  if (page->writable == false) {
+    return false;
+  }
+
+  if (page->frame->ref_cnt <= 1) {
+    // reference가 하나 (나 자신)이면 그대로 써도 된다.
+    pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, page->writable); // cow
+    return true;
+  }
+
+  struct frame *dup_frame = vm_get_frame();
+  memcpy(dup_frame->kva, page->frame->kva, PGSIZE);
+
+  // unlink frame
+  page->frame->ref_cnt -= 1; 
+  list_remove(&page->frame_elem);
+
+  // link page to frame
+  page->frame = dup_frame;
+  list_push_back(&dup_frame->page_list, &page->frame_elem); // link page to frame
+  dup_frame->ref_cnt += 1;
+
+  pml4_set_page(thread_current()->pml4, page->va, dup_frame->kva, page->writable); // cow
+
+  return true;
 }
 
 /* Return true on success */
@@ -227,14 +293,11 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
   // printf("[*] 💥 fault_address: %p\n", addr);
 
   if ((page = spt_find_page(spt, upage_entry)) != NULL) {
-    if (page->frame != NULL && page->writable == false && write == true) {
-      // 쓰기 불가능한 페이지에 쓰려고 하면 false 반환
-      // TODO vm_handle_wp를 활용해야 할것 같은데 방법이 떠오르지 않는다.
-      return false;
-    }
-    // case 1. file-backed, case 2. swap-out, case 3. first stack
-    if (vm_do_claim_page(page)) {
-      return true;
+    if (page->frame == NULL) {
+      return vm_do_claim_page(page);
+    } else {
+      ASSERT(write == true);
+      return vm_handle_wp(page);
     }
   } else {
   	/* 여기서부터는 page가 존재하지 않는 요청에 대해 처리 수행 - 명시적인 할당 요청이 없었음 */
@@ -242,6 +305,14 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
       // stack growth with legitimate stack pointer
       // `CALL` 명령과 함께 rsp가 증가한 상태로 page fault가 발생해야만 OK
       vm_stack_growth(upage_entry);
+      struct page *_p = spt_find_page(spt, upage_entry);
+      if (_p != NULL) {
+        // pml4_clear_page(thread_current()->pml4, _p->va);
+        pml4_set_page(thread_current()->pml4, _p->va, _p->frame->kva, false); // cow
+      } else {
+        return false;
+      }
+
       return true;
     }
   }
@@ -288,15 +359,22 @@ vm_do_claim_page (struct page *page) {
   ASSERT (frame != NULL);
 
 	/* Set links */
-	frame->page = page;
+	// frame->page = page;
+  list_push_back(&frame->page_list, &page->frame_elem);
 	page->frame = frame;
+  frame->ref_cnt += 1;
 
   // anonymous 는 0으로 채워줘야 한다.
   if (page_get_type(page) == VM_ANON) {
     memset(frame->kva, 0, PGSIZE);
   }
 
-	return swap_in (page, frame->kva);
+  bool success = swap_in (page, frame->kva);
+  if (success) {
+    pml4_set_page(thread_current()->pml4, page->va, frame->kva, false); // cow
+  }
+
+	return success;
 }
 
 static bool page_less(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED) {
@@ -347,13 +425,17 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
       // 부모 페이지에 frame이 할당되어 있지 않으면 (fault 가 발생하지 않았으면) aux를 복사
       uint64_t aux_size = get_size_of_aux(p->uninit.aux);
       dup_p->uninit.aux = calloc(1, aux_size);
+
+      // TODO file duplicate 해서 넘겨주자
+      
       memcpy(dup_p->uninit.aux, p->uninit.aux, aux_size);
     } else {
-      // 부모 페이지에 frame이 이미 할당되어 있으면 (fault 가 이미 발생했으면) frame 내용을 복사
-      dup_p->frame = vm_get_frame();
-      ASSERT(dup_p->frame != NULL);
-      pml4_set_page(thread_current()->pml4, p->va, dup_p->frame->kva, p->writable);
-      memcpy(dup_p->frame->kva, p->frame->kva, PGSIZE);
+      // 부모 페이지에 frame이 이미 할당되어 있으면 (fault 가 이미 발생했으면) reference count만 증가
+      dup_p->frame = p->frame;
+      dup_p->frame->ref_cnt += 1;
+
+      // 전부 read only로 설정하고, 나중에 write가 발생하면 fault가 발생하도록 한다.
+      pml4_set_page(thread_current()->pml4, p->va, dup_p->frame->kva, false); // cow
     }
 
     hash_insert(&dst->page_map, &dup_p->hash_elem);
@@ -365,7 +447,8 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 
 static void vm_dealloc_page_each(struct hash_elem *e, void *aux UNUSED) {
   struct page *p = hash_entry(e, struct page, hash_elem);
-  vm_dealloc_page(p);
+  // destory가 호출되어도 frame을 free 시키지 않으므로 모든 페이지에 대해 dealloc page 수행 가능
+  vm_dealloc_page(p); 
 }
 
 /* Free the resource hold by the supplemental page table */

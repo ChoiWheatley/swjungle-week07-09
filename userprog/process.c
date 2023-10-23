@@ -253,7 +253,7 @@ int process_exec(void *f_name) {
   char *file_name = f_name;
   bool success;
   int i;
-  char **argv = (char *)malloc (sizeof(char) * 128);
+  char **argv = (char **)palloc_get_page(0);
   char *token, *save_ptr; // token화 하기 위한 변수
   int argc = 0;  // argument 개수
 
@@ -283,6 +283,7 @@ int process_exec(void *f_name) {
   /* 유저스택에 인자 추가 */
   argument_stack(argc, argv, &_if);
   palloc_free_page(file_name);
+  palloc_free_page(argv);
   
   /* 프로세스 전환하여 실행 */
   do_iret(&_if);
@@ -429,7 +430,7 @@ void process_activate(struct thread *next) {
  * @brief 초기화된 유저 스택공간에 직접 인자를 추가한다.
  */
 void argument_stack(int argc, char **argv, struct intr_frame *if_) {
-  char *argv_addr[128];
+  char *argv_addr[ARGS_LEN];
 
   for (int i = argc - 1; i >= 0; i--) {
     int argv_len = strlen(argv[i]);
@@ -830,8 +831,8 @@ static bool lazy_load_segment(struct page *page, void *aux) {
   
   lock_acquire(inode_get_lock(file_get_inode(file)));
 
-  // code segment registration
-  pml4_set_page(t->pml4, page->va, page->frame->kva, writable);
+  // 커널의 세그먼트 적재 시작, writeable true
+  pml4_set_page(t->pml4, page->va, page->frame->kva, true);
 
   /* copy of load_segment when USERPROG */
   ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
@@ -854,6 +855,10 @@ static bool lazy_load_segment(struct page *page, void *aux) {
   free(aux); // 인자 (malloc) free 수행
 
   lock_release(inode_get_lock(file_get_inode(file)));
+
+  // 커널의 세그먼트 적재완료, writeable 원복
+  pml4_set_page(t->pml4, page->va, page->frame->kva, writable);
+
   return true;
 }
 
