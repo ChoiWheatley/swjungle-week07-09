@@ -53,8 +53,6 @@ struct page {
 	struct hash_elem hash_elem; // hash element for supplemental page table
 	struct list_elem frame_elem; // list element for frame list
 	
-	char __unused[49];
-	
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union {
