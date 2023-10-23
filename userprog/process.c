@@ -830,8 +830,8 @@ static bool lazy_load_segment(struct page *page, void *aux) {
   
   lock_acquire(inode_get_lock(file_get_inode(file)));
 
-  // code segment registration
-  pml4_set_page(t->pml4, page->va, page->frame->kva, writable);
+  // 커널의 세그먼트 적재 시작, writeable true
+  pml4_set_page(t->pml4, page->va, page->frame->kva, true);
 
   /* copy of load_segment when USERPROG */
   ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
@@ -854,6 +854,10 @@ static bool lazy_load_segment(struct page *page, void *aux) {
   free(aux); // 인자 (malloc) free 수행
 
   lock_release(inode_get_lock(file_get_inode(file)));
+
+  // 커널의 세그먼트 적재완료, writeable 원복
+  pml4_set_page(t->pml4, page->va, page->frame->kva, writable);
+
   return true;
 }
 

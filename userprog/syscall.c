@@ -309,7 +309,6 @@ struct file *fd_to_file(int fd) {
  */
 int read(int fd, void *buffer, unsigned size) {
   check_address(buffer);
-
   uint8_t *buf = buffer;
   off_t read_count;
 
@@ -318,6 +317,8 @@ int read(int fd, void *buffer, unsigned size) {
   if (p == NULL || (p->writable == false)) {
     exit(-1);
   }
+  
+  printf("[*] in syscall read, p->frame->kva = %p\n", p->frame->kva);
 
   if (fd == STDIN_FILENO) {  // STDIN일 때
     char key;

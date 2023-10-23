@@ -98,7 +98,7 @@ fill_pdes:
 
 #### Enable paging
 	mov %cr0, %eax
-	or $(CR0_PE|CR0_PG), %eax
+	or $(CR0_PE|CR0_PG|CR0_WP), %eax
 	mov %eax, %cr0
 
 #### Jump to the long mode
